@@ -1,4 +1,5 @@
 from __future__ import annotations
+from abc import abstractmethod
 
 # IMPORTS
 import asyncio
@@ -29,20 +30,16 @@ from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
+from .helpers import TopicDict, str2bool, bool2str
+
 # TYPES
-from typing import Dict, List, Union, Any
+from typing import Callable, Dict, List, Union, Any
 from homeassistant.helpers.typing import ConfigType, ServiceDataType
 from voluptuous.validators import Boolean
 
 # REGEX
 DISCOVER_DEVICE = re.compile(
     r"(?P<prefix_topic>\w[-/\w]*\w)/(?P<device_id>\w[-\w]*\w)/\$homie"
-)
-DISCOVER_NODES = re.compile(
-    r"(?P<prefix_topic>\w[-/\w]*\w)/(?P<node_id>\w[-\w]*\w)/\$properties"
-)
-DISCOVER_PROPERTIES = re.compile(
-    r"(?P<property_id>\w[-/\w]*\w)(\[(?P<range_start>[0-9])-(?P<range_end>[0-9]+)\])?(?P<settable>:settable)?"
 )
 
 # CONSTANTS
@@ -76,17 +73,6 @@ CONFIG_SCHEMA = vol.Schema(
 
 # GLOBALS
 _LOGGER = logging.getLogger(__name__)
-
-TRUE = "true"
-FALSE = "false"
-
-# Global Helper Functions
-def string_to_bool(val: str):
-    return val == TRUE
-
-
-def bool_to_string(val: bool):
-    return TRUE if val else FALSE
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -283,74 +269,58 @@ async def async_setup_disabled(hass: HomeAssistant, config: ConfigType, entry):
     return True
 
 
-# Types
-# TODO: DELETE
-class ChangeListener(object):
-    def __init__(self):
-        super().__init__()
-        self._listeners = list()
-
-    def __setattr__(self, name: str, value: str):
-        super(ChangeListener, self).__setattr__(name, value)
-        for action in self._listeners:
-            action()
-
-    def add_listener(self, action):
-        self._listeners.append(action)
-
-
-def get_topic_head(topic: str) -> Union[tuple[str, str], bool]:
-    topic = topic.strip("/")
-    last_slash_index = topic.rfind("/")
-
-    if last_slash_index == -1:
-        return False
-
-    return topic[last_slash_index + 1 :], topic
-
-
-class HomieDevice:
-    # A definition of a Homie Device
+class HomieBase:
     def __init__(
-        self, hass: HomeAssistant, base_topic: str, qos: int, on_ready: Callable
+        self,
+        hass: HomeAssistant,
+        base_topic: str,
+        qos: int = 0,
+        topic_dict: TopicDict = None,
     ):
-        self.device_id, self.base_topic = get_topic_head(base_topic)
+        self.id, self.base_topic = TopicDict.get_topic_head(base_topic)
 
-        if self.device_id is False:
+        if self.id is False:
             raise ValueError(
-                "Provide the full device topic (eg. 'homie/device-id'): %s"
+                "Provide the full topic (eg. 'homie/device-id', 'homie/device-id/node-id'): %s"
                 % self.base_topic
             )
 
-        self.nodes = dict()
-        self.topic_dict = TopicDict()
+        self.topic_dict = topic_dict if topic_dict else TopicDict()
         self.topic_dict.add_listener(self._update_topic_dict)
 
         self._hass = hass
         self._qos = qos
+
+    async def _async_update(self, mqttmsg: ReceiveMessage):
+        topic = mqttmsg.topic.lstrip(self.base_topic)
+
+        if topic == "":
+            self.topic_dict.value = mqttmsg.payload
+        else:
+            self.topic_dict[topic] = mqttmsg.payload
+
+    def _update_topic_dict(self, topic, value):
+        # Call the async version
+        self._hass.loop.create_task(self._async_update_topic_dict(topic, value))
+
+    @abstractmethod
+    async def _async_update_topic_dict(self, topic, value):
+        raise NotImplementedError("Must override _async_update_topic_dict fn")
+
+
+class HomieDevice(HomieBase):
+    # A definition of a Homie Device
+    def __init__(
+        self, hass: HomeAssistant, base_topic: str, qos: int, on_ready: Callable
+    ):
+        super().__init__(hass, base_topic, qos)
+
+        self.nodes = dict()
+
         self._sub_state = None
         self._on_ready = on_ready
 
     async def async_setup(self):
-        # async def _async_update_nodes(mqttmsg: ReceiveMessage):
-        #     # TODO: add nodes restiction list
-        #     node_match = DISCOVER_NODES.match(mqttmsg.topic)
-
-        #     if node_match:
-        #         node_id = node_match.group("node_id")
-        #         node_prefix_topic = node_match.group("prefix_topic")
-
-        #         if node_id not in self.nodes:
-        #             node = HomieNode(self, node_prefix_topic + "/" + node_id)
-        #             self.nodes[node_id] = node
-        #             await node.async_setup()
-
-        """await mqtt.async_subscribe(
-            self._hass,
-            f"{self.base_topic}/+/$properties",
-            _async_update_nodes,
-            qos,
-        )"""
 
         # Topics (and callback) to subscribe
         sub_topics = {
@@ -377,21 +347,13 @@ class HomieDevice:
             self._hass, self._sub_state, sub_topics
         )
 
-    async def _async_update(self, mqttmsg: ReceiveMessage):
-        # TODO: try without "/"
-        topic = mqttmsg.topic.replace(f"{self.base_topic}/", "")
-        self.topic_dict.topic_set(topic, mqttmsg.payload)
-
-    async def unsubscribe_topics(self):
+    async def async_unsubscribe_topics(self):
         self._sub_state = await subscription.async_unsubscribe_topics(
             self._hass, self._sub_state
         )
 
-    def _update_topic_dict(self, topic, value):
-        # Call the async version
-        self._hass.loop.create_task(self._async_update_topic_dict(topic, value))
-
     async def _async_update_topic_dict(self, topic, value):
+
         if topic == "$nodes":
             for node_id in value.split(","):
                 # TODO: add nodes restiction list
@@ -401,7 +363,7 @@ class HomieDevice:
                     await node.async_setup()
 
         # Ready
-        if topic == "$state" and value == "ready":
+        elif topic == "$state" and value == "ready":
             await asyncio.sleep(10)
             await self._on_ready(self, delayed=True)
 
@@ -412,47 +374,24 @@ class HomieDevice:
     def __getitem__(self, node_id: str):
         return self.node(node_id)
 
-    def __del__(self):
-        self.unsubscribe_topics()
 
-
-class HomieNode:
+class HomieNode(HomieBase):
     # A definition of a Homie Node
     def __init__(self, device: HomieDevice, base_topic: str):
-        self.node_id, self.base_topic = get_topic_head(base_topic)
-
-        if self.node_id is False:
-            raise ValueError(
-                "Provide the full Node topic (eg. 'homie/device-id/node-id'): %s"
-                % self.base_topic
-            )
+        super().__init__(device._hass, base_topic, device._qos)
 
         self.device = device
         self.properties = dict()
 
-        self.device.topic_dict[self.node_id] = TopicDict()
-        self.topic_dict = self.device.topic_dict[self.node_id]
-        # self.topic_dict.add_include_topic("^\$")
-        self.topic_dict.add_listener(self._update_topic_dict)
-
-        self._hass = device._hass
-        self._qos = device._qos
+        self.device.topic_dict[self.id] = self.topic_dict
 
     async def async_setup(self):
-        self.unsubscribe_topics = await mqtt.async_subscribe(
+        self.async_unsubscribe_topics = await mqtt.async_subscribe(
             self._hass, f"{self.base_topic}/+", self._async_update, self._qos
         )
 
-    async def _async_update(self, mqttmsg: ReceiveMessage):
-        # TODO: try without "/"
-        topic = mqttmsg.topic.replace(f"{self.base_topic}/", "")
-        self.topic_dict[topic] = mqttmsg.payload
-
-    def _update_topic_dict(self, topic, value):
-        # Call the async version
-        self._hass.loop.create_task(self._async_update_topic_dict(topic, value))
-
     async def _async_update_topic_dict(self, topic, value):
+
         # notes: can be removed this method and call node.async_setup() by create_task
         if topic == "$properties":
             for property_id in value.split(","):
@@ -473,190 +412,41 @@ class HomieNode:
     def __getitem__(self, property_id: str):
         return self.property(property_id)
 
-    def __del__(self):
-        self.unsubscribe_topics()
 
-
-class HomieProperty:
+class HomieProperty(HomieBase):
     # A definition of a Homie Property
     def __init__(self, node: HomieNode, base_topic: str):
-        self.property_id, self.base_topic = get_topic_head(base_topic)
-
-        if self.property_id is False:
-            raise ValueError(
-                "Provide the full Property topic (eg. 'homie/device-id/node-id/property-id'): %s"
-                % self.base_topic
-            )
+        super().__init__(node._hass, base_topic, node._qos)
 
         self.node = node
 
-        self.node.topic_dict[self.property_id] = TopicDict()
-        self.topic_dict = self.node.topic_dict[self.property_id]
-        self.topic_dict.add_listener(self._update_topic_dict)
-
-        self._hass = node._hass
-        self._qos = node._qos
+        self.node.topic_dict[self.id] = self.topic_dict
 
     async def async_setup(self):
-        self.unsubscribe_topics = await mqtt.async_subscribe(
+        self.async_unsubscribe_topics = await mqtt.async_subscribe(
             self._hass, f"{self.base_topic}/#", self._async_update, self._qos
         )
-
-    async def _async_update(self, mqttmsg: ReceiveMessage):
-        topic = mqttmsg.topic.replace(f"{self.base_topic}", "")
-
-        if topic == "":
-            self.topic_dict.value = mqttmsg.payload
-        else:
-            self.topic_dict[topic] = mqttmsg.payload
-
-    def _update_topic_dict(self, topic, value):
-        self._hass.loop.create_task(self._async_update_topic_dict(topic, value))
 
     async def _async_update_topic_dict(self, topic, value):
         pass
 
     @callback
-    async def async_set(self, value: str):
+    def async_set(self, value: str):
         """Set the state of the Property."""
         if self.settable:
             mqtt.async_publish(
                 self._hass, f"{self._prefix_topic}/set", value, self._qos, retain=True
             )
 
-    # @property
-    # def value(self):
-    #     return self.topic_dict[]
+    @property
+    def value(self):
+        return self.topic_dict.value
 
-    # @value.setter
-    # def value(self, value):
-    #     self._value = value
+    @value.setter
+    def value(self, value):
+        self.topic_dict.value = value
 
     @property
     def settable(self):
         """Return if the Property is settable."""
-        return string_to_bool(self.topic_dict["$settable"])
-
-    def __del__(self):
-        self.unsubscribe_topics()
-
-
-class TopicNode(dict):
-    def __init__(self, value: Any = None, sub_topic: Dict[str, TopicNode] = {}):
-        super().__init__(sub_topic)
-        self._value = value
-
-    def __str__(self):
-        topic_child_str = ", ".join(
-            "%s: %s" % (key, self[key].__str__()) for key in super().keys()
-        )
-        return "(%s, {%s})" % (self._value, topic_child_str)
-
-    def __repr__(self):
-        return self.__str__()
-
-    @property
-    def value(self):
-        return self._value
-
-    @value.setter
-    def value(self, value):
-        self._value = value
-
-
-from typing import Callable
-
-TopicDictCallbackType = Callable[[str, Any], bool]
-
-
-class TopicDict(TopicNode):
-    def __init__(self, include_topics: List = [], exclude_topics: List = []):
-        super().__init__()
-        self._listeners = list()
-        self._include_topics = list()
-        self._exclude_topics = list()
-        self.add_include_topic(*include_topics)
-        self.add_exclude_topic(*exclude_topics)
-
-    @staticmethod
-    def _topic_to_lst(topic_path: str) -> list:
-        return topic_path.strip("/").split("/")
-
-    def add_include_topic(self, *regex_patterns: List[str]):
-        for regex_pattern in regex_patterns:
-            self._include_topics.append(re.compile(regex_pattern))
-
-    def add_exclude_topic(self, *regex_patterns: List[str]):
-        for regex_pattern in regex_patterns:
-            self._exclude_topics.append(re.compile(regex_pattern))
-
-    def add_listener(self, callback: TopicDictCallbackType):
-        self._listeners.append(callback)
-
-    def topic_get(self, topic_path: Union[str, list], default=None):
-
-        if not isinstance(topic_path, list):
-            topic_path = self._topic_to_lst(topic_path)
-
-        topic_node = self
-
-        for topic_lvl in topic_path:
-
-            if topic_lvl not in topic_node:
-                return default
-
-            topic_node = topic_node.get(topic_lvl)
-
-        return topic_node
-
-    def topic_set(self, topic_path: str, value):
-
-        if self._include_topics and not any(
-            regex_include.match(topic_path) for regex_include in self._include_topics
-        ):
-            return False
-
-        if self._exclude_topics and any(
-            regex_exclude.match(topic_path) for regex_exclude in self._exclude_topics
-        ):
-            return False
-
-        if self._listeners and any(
-            callback(topic_path, value) for callback in self._listeners
-        ):
-            return False
-
-        topic_node = self
-
-        for topic_lvl in self._topic_to_lst(topic_path):
-            topic_node = topic_node.setdefault(topic_lvl, TopicDict())
-
-        if isinstance(value, TopicDict):
-            topic_parent_node, topic_label = self._get_parent(topic_path)
-            super(TopicNode, topic_parent_node).__setitem__(topic_label, value)
-
-        else:
-            topic_node.value = value
-
-    def _get_parent(self, topic_path: str):
-
-        topic_path_list = self._topic_to_lst(topic_path)
-        return self.topic_get(topic_path_list[:-1], False), topic_path_list[-1]
-
-    def topic_del(self, topic_path: str):
-
-        topic_parent_node, topic_label = self._get_parent(topic_path)
-
-        if not topic_parent_node:
-            return False
-
-        return topic_parent_node.pop(topic_label, False)
-
-    def __getitem__(self, topic_path):
-        return self.topic_get(topic_path)
-
-    def __setitem__(self, topic_path, value):
-        self.topic_set(topic_path, value)
-
-    def __delitem__(self, topic_path):
-        self.topic_del(topic_path)
+        return str2bool(self.topic_dict["$settable"])
