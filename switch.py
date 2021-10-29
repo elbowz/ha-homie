@@ -6,13 +6,17 @@ import voluptuous as vol
 
 from homeassistant.components import switch
 from homeassistant.components.mqtt.switch import MqttSwitch
-from homeassistant.components.switch import SwitchEntity
+from homeassistant.components.switch import SwitchEntity, PLATFORM_SCHEMA
 
 from homeassistant.core import HomeAssistant, callback
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.reload import async_setup_reload_service
 from homeassistant.helpers.typing import ConfigType
+
+from .helpers import bool2str, str2bool
+
+from .const import HOMIE_DISCOVERY_NEW, SWITCH
 
 from homeassistant.const import (
     CONF_NAME,
@@ -28,20 +32,23 @@ from . import (
     PLATFORMS,
     KEY_HOMIE_ALREADY_DISCOVERED,
     KEY_HOMIE_ENTITY_NAME,
-    HomieNode,
+    HomieProperty,
+    TRUE,
+    FALSE,
 )
 
 # CONSTANTS
 _LOGGER = logging.getLogger(__name__)
 DEFAULT_NAME = "Homie Switch"
-HOMIE_DISCOVERY_NEW = "homie_discovery_new_{}_{}"
+
 STATE_PROP = "light"
 STATE_ON_VALUE = "true"
 STATE_OFF_VALUE = "false"
 
-PLATFORM_SCHEMA = vol.Schema(
+PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
-        vol.Optional("KEY_HOMIE_ENTITY_ID", default=DEFAULT_NAME): cv.string,
+        vol.Required("ciao"): cv.string,
+        vol.Optional("bau", default="admin"): cv.string,
     }
 )
 
@@ -50,8 +57,9 @@ async def async_setup_platform(
     hass: HomeAssistant, config: ConfigType, async_add_entities, discovery_info=None
 ):
     """Called if exist a platform entry (ie. 'platform: homie') in configuration.yaml"""
-    await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
-    await _async_setup_entity(hass, async_add_entities, config)
+    # await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
+    # await _async_setup_entity(hass, async_add_entities, config)
+    pass
 
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
@@ -66,21 +74,37 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
     _LOGGER.debug("async_setup_entry(): %s", config_entry)
 
-    await async_setup_entry_helper(hass, switch.DOMAIN, setup, PLATFORM_SCHEMA)
+    # await async_setup_entry_helper(hass, switch.DOMAIN, setup, PLATFORM_SCHEMA)
+
+    async def async_discover(discovery_payload):
+        """Discover and add an Homie entity"""
+        # discovery_data = discovery_payload.discovery_data
+        # discovery_data = discovery_payload
+        # config = schema(discovery_payload)
+        # await async_setup(config, discovery_data=discovery_data)
+        _LOGGER.debug("async_discover(): %s", discovery_payload)
+
+        async_add_entities([HomieSwitch(hass, discovery_payload)])
+
+    async_dispatcher_connect(hass, HOMIE_DISCOVERY_NEW.format(SWITCH), async_discover)
+
+    # async_dispatcher_connect(
+    #     hass, HOMIE_DISCOVERY_NEW.format(switch.DOMAIN), async_discover
+    # )
 
 
 async def async_setup_entry_helper(hass, domain, async_setup, schema):
-    """Set up entity, automation or tag creation dynamically through MQTT discovery."""
+    """Set up entity dynamically through Homie discovery."""
 
     async def async_discover(discovery_payload):
-        """Discover and add an MQTT entity, automation or tag."""
+        """Discover and add an Homie entity"""
         # discovery_data = discovery_payload.discovery_data
         discovery_data = discovery_payload
         config = schema(discovery_payload)
         await async_setup(config, discovery_data=discovery_data)
 
     async_dispatcher_connect(
-        hass, "homie_discovery_new".format(switch.DOMAIN, "homie"), async_discover
+        hass, "homie_discovery_new".format(SWITCH, "homie"), async_discover
     )
 
 
@@ -140,68 +164,85 @@ async def async_setup_platform_disabled(
     async_add_entities([HomieSwitch(hass, entity_name, homie_sensor_node)])
 
 
-class HomieSwitch(SwitchEntity):
+from homeassistant.helpers.entity import Entity
+from homeassistant.helpers import device_registry
+from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.config_entries import ConfigEntry
+
+
+class HomieEntity(Entity):
     """Implementation of a Homie Switch."""
 
     def __init__(
-        self, hass: HomeAssistant, entity_name: str, homie_sensor_node: HomieNode
+        self,
+        hass: HomeAssistant,
+        homie_property: HomieProperty,
+        config: ConfigType = None,
+        config_entry: ConfigEntry = None,
     ):
         """Initialize Homie Switch."""
-        self.hass = hass
-        self._name = entity_name
-        self._node = homie_sensor_node
-        self._unique_id = "homie.unique_id"
+        self._hass = hass
+        self._homie_property = homie_property
+        self._config = config
+        self._config_entry = config_entry
+
+        self._homie_node = homie_property.node
+        self._homie_device = homie_property.node.device
+
+        self._optimistic = False
+        self._unique_id = homie_property.base_topic.replace("/", "-")
+
+        # update also on device change?!
+        # self._homie_device.t.add_listener(self._on_change)
+        self._homie_property.t.add_listener(self._on_change)
 
     async def async_added_to_hass(self):
         """Subscribe mqtt events."""
-        await super().async_added_to_hass()
-        self._node.device.add_listener(self._on_change)
-        self._node.add_listener(self._on_change)
-        self._node.get_property(STATE_PROP).add_listener(self._on_change)
+        _LOGGER.debug("HomieEntity.async_added_to_hass()")
+
+        # NON CREDO SERVA => funzione vuota
+        # await super().async_added_to_hass()
+
+        # await self._homie_property.node.device.async_setup()
+
+    async def async_will_remove_from_hass(self):
+        _LOGGER.debug("async_will_remove_from_hass()")
+
+        # TODO: unsbscribe topics
+
+        # NON CREDO SERVA => funzione vuota
+        # await super().async_will_remove_from_hass()
 
     # convert to async?
-    def _on_change(self):
-        _LOGGER.debug("async_schedule_update_ha_state() %s", vars(self))
-        self.async_write_ha_state()
-        # self.async_schedule_update_ha_state(force_refresh=False)
+    def _on_change(self, topic, value):
+        if topic != "set":
+            _LOGGER.debug("_on_change %s %s", topic, value)
+            self.async_write_ha_state()
 
     @property
-    def name(self):
-        """Return the name of the Homie Switch."""
-        return self._name
+    def extra_state_attributes(self):
+        """Return the state attributes."""
 
-    @property
-    def is_on(self):
-        """Returns true if the Homie Switch is on."""
-        return self._node.get_property(STATE_PROP).state == STATE_ON_VALUE
+        _LOGGER.debug("extra_state_attributes()")
 
-    @property
-    def should_poll(self):
-        return False
+        property_attrs = {
+            f"attr-{topic.lstrip('$')}": value
+            for topic, value in self._homie_property.t.dict_value().items()
+        }
 
-    async def async_turn_on(self, **kwargs):
-        """Turn the device on.
+        stats = {
+            f"stat-{topic}": value
+            for topic, value in self._homie_device.t.get_obj("$stats")
+            .dict_value()
+            .items()
+        }
 
-        This method is a coroutine.
-        """
-        _LOGGER.debug("async_turn_on()")
-
-        await self._node.get_property(STATE_PROP).async_set_state(STATE_ON_VALUE)
-
-    async def async_turn_off(self, **kwargs):
-        """Turn the device off.
-
-        This method is a coroutine.
-        """
-        _LOGGER.debug("async_turn_on()")
-
-        await self._node.get_property(STATE_PROP).async_set_state(STATE_OFF_VALUE)
-
-    @property
-    def available(self):
-        """Return if the device is available."""
-        return True
-        return self._node.device.online
+        return {
+            **property_attrs,
+            **stats,
+            "ip": self._homie_device.t["$localip"],
+            "device-config": self._homie_device.t["$implementation/config"],
+        }
 
     @property
     def device_info(self):
@@ -209,15 +250,89 @@ class HomieSwitch(SwitchEntity):
 
         _LOGGER.debug("device_info()")
 
-        return {
-            "identifiers": {(DOMAIN, "8345934534")},
-            "name": "device name homie",
-            "manufacturer": "manufacture home",
-            "model": "model homie",
-            "sw_version": "1.3",
-        }
+        mac = device_registry.format_mac(self._homie_device.t["$mac"])
+
+        return {"identifiers": {(DOMAIN, mac)}}
+
+    @property
+    def should_poll(self):
+        """No polling needed."""
+        return False
+
+    @property
+    def assumed_state(self):
+        """Return true if we do optimistic updates."""
+        return self._optimistic
+
+    @property
+    def available(self):
+        """Return if the device is available."""
+        return self._homie_device.t.get("$state") == "ready"
+
+    @property
+    def name(self):
+        """Return the name of the Homie Switch."""
+        return self._homie_property.t.get("$name", self._homie_property.id)
+
+    @property
+    def icon(self):
+        """Return icon of the entity if any."""
+        return None  # self._config.get(CONF_ICON)
 
     @property
     def unique_id(self):
         """Return a unique ID."""
         return self._unique_id
+
+
+class HomieSwitch(HomieEntity, SwitchEntity, RestoreEntity):
+    """Implementation of a Homie Switch."""
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        homie_property: HomieProperty,
+        config: ConfigType = None,
+        config_entry: ConfigEntry = None,
+    ):
+        """Initialize Homie Switch."""
+        HomieEntity.__init__(self, hass, homie_property, config, config_entry)
+
+    async def async_added_to_hass(self):
+        """Subscribe mqtt events."""
+        _LOGGER.debug("HomieSwitch.async_added_to_hass()")
+
+        await super().async_added_to_hass()
+        # await self._homie_property.node.device.async_setup()
+
+        if self._optimistic:
+            last_state = await self.async_get_last_state()
+            if last_state:
+                self._homie_property.value = bool2str(last_state.state == STATE_ON)
+
+    @property
+    def is_on(self):
+        """Returns true if the Homie Switch is on."""
+        return str2bool(self._homie_property.value)
+
+    async def async_turn_on(self, **kwargs):
+        """Turn the device on."""
+        _LOGGER.debug("async_turn_on()")
+
+        self._homie_property.async_set(TRUE)
+
+        if self._optimistic:
+            # Optimistically assume that switch has changed state.
+            self._homie_property.value = TRUE
+            self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs):
+        """Turn the device off."""
+        _LOGGER.debug("async_turn_off()")
+
+        self._homie_property.async_set(FALSE)
+
+        if self._optimistic:
+            # Optimistically assume that switch has changed state.
+            self._homie_property.value = FALSE
+            self.async_write_ha_state()
