@@ -28,7 +28,7 @@ from homeassistant.const import (
     CONF_INCLUDE,
     CONF_EXCLUDE,
 )
-from homeassistant.core import callback
+from homeassistant.core import Event, callback
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
@@ -36,7 +36,7 @@ from homeassistant.core import HomeAssistant
 
 from homeassistant.helpers import device_registry
 
-from .helpers import TopicDict, str2bool, bool2str
+from .helpers import Observable, TopicDict, str2bool, bool2str
 
 # TYPES
 from typing import Callable, Dict, List, Union, Any
@@ -346,19 +346,6 @@ async def async_setup_disabled(hass: HomeAssistant, config: ConfigType, entry):
     return True
 
 
-# TODO: use also in TopicDict?! and/or implement bubbling in TopicDict?
-class Observable(object):
-    def __init__(self):
-        self._callbacks = []
-
-    def subscribe(self, callback):
-        self._callbacks.append(callback)
-
-    async def _async_call_subscribers(self, *attrs, **kwargs):
-        for fn in self._callbacks:
-            await fn(*attrs, **kwargs)
-
-
 class HomieBase(Observable):
     def __init__(
         self,
@@ -378,10 +365,12 @@ class HomieBase(Observable):
             )
 
         self.topic_dict = topic_dict if topic_dict else TopicDict()
-        self.topic_dict.add_listener(self._update_topic_dict)
+        self.topic_dict.subscribe(self._async_update_topic_dict)
 
         self._hass = hass
         self._qos = qos
+
+        self._asyncio_event = dict()
 
         if async_on_change:
             self.subscribe(async_on_change)
@@ -402,23 +391,37 @@ class HomieBase(Observable):
         else:
             self.topic_dict[topic] = mqttmsg.payload
 
-    def _update_topic_dict(self, topic, value):
+    # def _update_topic_dict(self, topic, value):
 
-        # _LOGGER.debug(
-        #     "%s._update_topic_dict %s -> %s",
-        #     self.__class__.__name__,
-        #     topic,
-        #     value,
-        # )
+    #     # _LOGGER.debug(
+    #     #     "%s._update_topic_dict %s -> %s",
+    #     #     self.__class__.__name__,
+    #     #     topic,
+    #     #     value,
+    #     # )
 
-        # Call the async version
-        self._hass.loop.create_task(self._async_update_topic_dict(topic, value))
-        # Call the subscribed functions (Observable)
-        self._hass.loop.create_task(self._async_call_subscribers(self, topic, value))
+    #     # Call the async version
+    #     self._hass.loop.create_task(self._async_update_topic_dict(topic, value))
+    #     # Call the subscribed functions (Observable)
+    #     self._call_subscribers(self, topic, value)
 
     @abstractmethod
     async def _async_update_topic_dict(self, topic, value):
-        raise NotImplementedError()
+        self._call_subscribers(self, topic, value)
+        # raise NotImplementedError()
+
+    def _event_fire(self, name):
+        self._asyncio_event.setdefault(name, asyncio.Event()).set()
+
+    async def _event_wait(self, name, timeout=10):
+        event = self._asyncio_event.setdefault(name, asyncio.Event())
+
+        try:
+            await asyncio.wait_for(event.wait(), timeout=10)
+        except asyncio.TimeoutError:
+            return False
+
+        return True
 
     @property
     def t(self):
@@ -476,6 +479,7 @@ class HomieDevice(HomieBase):
         # TODO: add nodes unsubscribe
 
     async def _async_update_topic_dict(self, topic, value):
+        await super()._async_update_topic_dict(topic, value)
 
         if topic == "$nodes":
             for node_id in value.split(","):
@@ -484,6 +488,17 @@ class HomieDevice(HomieBase):
                     node = HomieNode(self, self.base_topic + "/" + node_id)
                     self.nodes[node_id] = node
                     await node.async_setup()
+
+            self._event_fire("nodes-init")
+
+    def has_node(self, node_id: str):
+        """Check presence of Node in the device."""
+        return node_id in self.nodes
+
+    async def async_has_node(self, node_id: str):
+        """Check presence of Node in the device."""
+        await self._event_wait("nodes-init")
+        return self.has_node(node_id)
 
     def node(self, node_id: str):
         """Return a specific Node for the device."""
@@ -516,6 +531,7 @@ class HomieNode(HomieBase):
         # TODO: add properties unsubscribe
 
     async def _async_update_topic_dict(self, topic, value):
+        await super()._async_update_topic_dict(topic, value)
 
         # notes: can be removed this method and call node.async_setup() by create_task
         if topic == "$properties":
@@ -526,13 +542,20 @@ class HomieNode(HomieBase):
                     self.properties[property_id] = property
                     await property.async_setup()
 
-    async def _async_call_subscribers(self, *attrs, **kwargs):
-        await super()._async_call_subscribers(*attrs, **kwargs)
-        await self.device._async_call_subscribers(*attrs, **kwargs)
+            self._event_fire("properties-init")
+
+    def _call_subscribers(self, *attrs, **kwargs):
+        super()._call_subscribers(*attrs, **kwargs)
+        self.device._call_subscribers(*attrs, **kwargs)
 
     def has_property(self, property_id: str):
         """Return a specific Property for the node."""
         return property_id in self.properties
+
+    async def async_has_property(self, property_id: str):
+        """Check presence of Node in the device."""
+        await self._event_wait("properties-init")
+        return self.has_property(property_id)
 
     def property(self, property_id: str):
         """Return a specific Property for the Node."""
@@ -555,12 +578,12 @@ class HomieProperty(HomieBase):
             self._hass, f"{self.base_topic}/#", self._async_update, self._qos
         )
 
-    async def _async_call_subscribers(self, *attrs, **kwargs):
-        await super()._async_call_subscribers(*attrs, **kwargs)
-        await self.node._async_call_subscribers(*attrs, **kwargs)
+    def _call_subscribers(self, *attrs, **kwargs):
+        super()._call_subscribers(*attrs, **kwargs)
+        self.node._call_subscribers(*attrs, **kwargs)
 
-    async def _async_update_topic_dict(self, topic, value):
-        pass
+    # async def _async_update_topic_dict(self, topic, value):
+    #     pass
 
     @callback
     def async_set(self, value: str):

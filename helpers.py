@@ -1,7 +1,30 @@
 from __future__ import annotations
 
 import re
+import asyncio
 from typing import Any, Callable, Union
+
+
+class Observable(object):
+    def __init__(self):
+        self._callbacks = []
+
+    def subscribe(self, callback: Callable):
+        self._callbacks.append(callback)
+
+    def unsubscribe(self, callback: Callable):
+        if callback in self._callbacks:
+            self._callbacks.remove(callback)
+
+    def _call_subscribers(self, *attrs, **kwargs):
+        fn_return = []
+
+        for fn in self._callbacks:
+            if asyncio.iscoroutinefunction(fn):
+                fn_return.append(asyncio.create_task(fn(*attrs, **kwargs)))
+            else:
+                fn_return.append(fn(*attrs, **kwargs))
+
 
 TopicDictCallbackType = Callable[[str, Any], bool]
 
@@ -34,10 +57,10 @@ class TopicNode(dict):
 
 
 # TODO: swap super(TopicNode, self) with TopicNode.method(self, )
-class TopicDict(TopicNode):
+class TopicDict(TopicNode, Observable):
     def __init__(self, include_topics: list[str] = [], exclude_topics: list[str] = []):
-        super().__init__()
-        self._listeners = list()
+        TopicNode.__init__(self)
+        Observable.__init__(self)
         self._include_topics = list()
         self._exclude_topics = list()
         self.add_include_topic(*include_topics)
@@ -64,9 +87,6 @@ class TopicDict(TopicNode):
     def add_exclude_topic(self, *regex_patterns: list[str]):
         for regex_pattern in regex_patterns:
             self._exclude_topics.append(re.compile(regex_pattern))
-
-    def add_listener(self, callback: TopicDictCallbackType):
-        self._listeners.append(callback)
 
     def _get_parent_by_topic(self, topic_path: str):
 
@@ -126,10 +146,7 @@ class TopicDict(TopicNode):
         else:
             topic_node._value = value
 
-        if self._listeners:
-            for callback in self._listeners:
-                # TODO: convert to async?
-                callback(topic_path, value)
+        Observable._call_subscribers(self, topic_path, value)
 
     def _del(self, topic_path: str):
 
@@ -157,10 +174,7 @@ class TopicDict(TopicNode):
     def value(self, value):
         self._value = value
 
-        if self._listeners:
-            for callback in self._listeners:
-                # TODO: convert to async?
-                callback("", value)
+        Observable._call_subscribers(self, "", value)
 
 
 from .const import TRUE, FALSE

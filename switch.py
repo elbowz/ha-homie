@@ -99,30 +99,18 @@ async def async_setup_platform(
     # await _async_setup_entity(hass, async_add_entities, config)
 
     _LOGGER.debug("async_setup_platform() %s %s", config, hass.data.get(HOMIE_CONFIG))
-
-    import asyncio
-
-    event = asyncio.Event()
-
-    async def async_component_change(cls, topic, value):
-        if (
-            type(cls) is HomieProperty
-            and cls.id == "light"
-            and topic == "$settable"
-            and value == TRUE
-        ):
-            event.set()
-
+    return
     device = HomieDevice(
         hass,
         "bdiot/thumbl-p-dev",
         config.get(CONF_QOS),
-        async_component_change,
     )
 
     await device.async_setup()
-    await event.wait()
-    # async_add_entities([HomieSwitch(hass, device["light"]["light"])])
+
+    if await device.async_has_node("light"):
+        if await device["light"].async_has_property("light"):
+            async_add_entities([HomieSwitch(hass, device["light"]["light"], config)])
 
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
@@ -149,7 +137,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
         async_add_entities([HomieSwitch(hass, discovery_payload)])
 
-    # async_dispatcher_connect(hass, HOMIE_DISCOVERY_NEW.format(SWITCH), async_discover)
+    async_dispatcher_connect(hass, HOMIE_DISCOVERY_NEW.format(SWITCH), async_discover)
 
 
 async def async_setup_entry_helper(hass, domain, async_setup, schema):
@@ -274,10 +262,9 @@ class HomieEntity(Entity):
 
     # convert to async?
     async def _on_change(self, cls, topic, value):
-        _LOGGER.debug("_on_change %s %s %s", cls, topic, value)
         if topic != "set":
-            pass
-            # self.async_write_ha_state()
+            _LOGGER.debug("_on_change %s %s %s", cls, topic, value)
+            self.async_write_ha_state()
 
     @property
     def extra_state_attributes(self):
