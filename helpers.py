@@ -103,13 +103,13 @@ class TopicDict(TopicNode):
 
         if not force:
             if self._include_topics and not any(
-                regex_include.match(topic_path)
+                regex_include.search(topic_path)
                 for regex_include in self._include_topics
             ):
                 return False
 
             if self._exclude_topics and any(
-                regex_exclude.match(topic_path)
+                regex_exclude.search(topic_path)
                 for regex_exclude in self._exclude_topics
             ):
                 return False

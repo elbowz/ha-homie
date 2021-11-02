@@ -8,6 +8,7 @@
   "zeroconf": [],
   "homekit": {},
   "dependencies": ["mqtt"],
+  "mqtt": ["bdiot/thumbl-p-dev/$state"],
   "codeowners": [
     "@elbowz"
   ],

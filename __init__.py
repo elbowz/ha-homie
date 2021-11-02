@@ -15,17 +15,19 @@ import sys
 import homeassistant.components.mqtt as mqtt
 from homeassistant.components.mqtt.models import ReceiveMessage
 from homeassistant.components.mqtt import (
-    CONF_DISCOVERY_PREFIX,
-    CONF_QOS,
     valid_subscribe_topic,
-    _VALID_QOS_SCHEMA,
     subscription,
 )
 from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers import config_validation as cv
-from homeassistant.const import EVENT_HOMEASSISTANT_STOP, STATE_UNKNOWN
+from homeassistant.const import (
+    EVENT_HOMEASSISTANT_STOP,
+    STATE_UNKNOWN,
+    CONF_INCLUDE,
+    CONF_EXCLUDE,
+)
 from homeassistant.core import callback
 
 from homeassistant import config_entries
@@ -48,23 +50,25 @@ DISCOVER_DEVICE = re.compile(
 
 # CONSTANTS
 from .const import (
+    DISCOVERY_TOPIC,
     DOMAIN,
     HOMIE_CONFIG,
+    CONF_BASE_TOPIC,
+    CONF_DISCOVERY,
+    CONF_QOS,
+    _VALID_QOS_SCHEMA,
+    DEFAULT_BASE_TOPIC,
+    DEFAULT_QOS,
+    DEFAULT_DISCOVERY,
     PLATFORMS,
     HOMIE_DISCOVERY_NEW,
+    HOMIE_SUPPORTED_VERSION,
     SWITCH,
     TRUE,
     FALSE,
 )
 
-# PLATFORMS = ["binary_sensor", "light", "number", "sensor", "switch"]
 
-DEPENDENCIES = ["mqtt"]
-INTERVAL_SECONDS = 1
-MESSAGE_MAX_KEEP_SECONDS = 5
-HOMIE_SUPPORTED_VERSION = ["3.0.0", "3.0.1", "4.0.0"]
-DEFAULT_DISCOVERY_PREFIX = "homie"
-DEFAULT_QOS = 1
 KEY_HOMIE_ALREADY_DISCOVERED = "KEY_HOMIE_ALREADY_DISCOVERED"
 KEY_HOMIE_ENTITY_NAME = "KEY_HOMIE_ENTITY_ID"
 
@@ -74,14 +78,23 @@ CONFIG_SCHEMA = vol.Schema(
         DOMAIN: vol.Schema(
             {
                 vol.Optional(
-                    CONF_DISCOVERY_PREFIX, default=DEFAULT_DISCOVERY_PREFIX
+                    CONF_BASE_TOPIC, default=DEFAULT_BASE_TOPIC
                 ): valid_subscribe_topic,
                 vol.Optional(CONF_QOS, default=DEFAULT_QOS): _VALID_QOS_SCHEMA,
+                vol.Optional(CONF_DISCOVERY, default=DEFAULT_DISCOVERY): cv.boolean,
+                vol.Optional(CONF_INCLUDE, default=[]): vol.All(
+                    cv.ensure_list, [cv.string]
+                ),
+                vol.Optional(CONF_EXCLUDE, default=[]): vol.All(
+                    cv.ensure_list, [cv.string]
+                ),
             }
         ),
     },
+    # TODO: remove?
     extra=vol.ALLOW_EXTRA,
 )
+
 
 # GLOBALS
 _LOGGER = logging.getLogger(__name__)
@@ -109,6 +122,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     if not hass.config_entries.async_entries(DOMAIN):
         # call the class ConfigFlow.async_step_import to create a config entry for yaml
         # ...and the async_setup_entry with the new created entry
+        # https://developers.home-assistant.io/docs/data_entry_flow_index#initializing-a-config-flow-from-an-external-source
         hass.async_create_task(
             hass.config_entries.flow.async_init(
                 DOMAIN, context={"source": config_entries.SOURCE_IMPORT}, data={}
@@ -204,11 +218,12 @@ async def async_setup_disabled(hass: HomeAssistant, config: ConfigType, entry):
     # conf = config.get(DOMAIN)
     if conf is None:
         conf = CONFIG_SCHEMA({DOMAIN: {}})[DOMAIN]
-    # discovery_prefix = conf.get(CONF_DISCOVERY_PREFIX)
-    discovery_prefix = "+"
+
+    base_topic = conf.get(CONF_BASE_TOPIC).strip("/")
+    discovery_topic = DISCOVERY_TOPIC.format(base_topic)
     qos = conf.get(CONF_QOS)
 
-    _LOGGER.debug("DEBUG discovery_prefix %s", discovery_prefix)
+    _LOGGER.debug("DEBUG discovery_topic %s", discovery_topic)
 
     # Destroy Homie
     # async def async_destroy(event):
@@ -220,7 +235,7 @@ async def async_setup_disabled(hass: HomeAssistant, config: ConfigType, entry):
     async def async_start():
 
         await mqtt.async_subscribe(
-            hass, f"{discovery_prefix}/+/$homie", async_discover_message_received, qos
+            hass, discovery_topic, async_discover_message_received, qos
         )
 
     async def async_discover_message_received(mqttmsg: ReceiveMessage):
@@ -238,7 +253,7 @@ async def async_setup_disabled(hass: HomeAssistant, config: ConfigType, entry):
                     hass,
                     device_prefix_topic + "/" + device_id,
                     qos,
-                    async_component_ready,
+                    async_component_change,
                 )
 
                 _DEVICES[device_id] = device
@@ -250,14 +265,20 @@ async def async_setup_disabled(hass: HomeAssistant, config: ConfigType, entry):
                     mqttmsg.payload,
                 )
 
-    async def async_component_ready(component, delayed=False):
-        if type(component) is HomieDevice:
+    async def async_component_change(component, topic, value):
+        # _LOGGER.debug(
+        #     "async_component_change %s, %s, %s", type(component), topic, value
+        # )
+
+        # Ready
+        if type(component) is HomieDevice and topic == "$state" and value == "ready":
+            await asyncio.sleep(10)
             await async_setup_device(component)
-        if type(component) is HomieNode:
-            await async_setup_node(component)
 
     async def async_setup_device(device: HomieDevice):
         _LOGGER.debug("async_setup_device %s ", device.id)
+
+        # TODO: check include/exclude on device.base_topic
 
         mac = device_registry.format_mac(device.t["$mac"])
 
@@ -276,7 +297,19 @@ async def async_setup_disabled(hass: HomeAssistant, config: ConfigType, entry):
         dr.async_get_or_create(**device_registry_entry)
 
         for node in device.nodes.values():
+
+            # TODO: check include/exclude on node.base_topic
+
             for property in node.properties.values():
+
+                # TODO: check include/exclude on property.base_topic
+
+                # TODO: check if already added
+                # device_registry = await hass.helpers.device_registry.async_get(hass)
+                # entity_registry = await self.hass.helpers.entity_registry.async_get(hass)
+                # if entity_registry.async_is_registered(self.entity_id):
+                #     entity_entry = entity_registry.async_get(self.entity_id)
+
                 if property.settable and property.datatype == "boolean":
                     async_dispatcher_send(
                         hass, HOMIE_DISCOVERY_NEW.format(SWITCH), property
@@ -313,14 +346,29 @@ async def async_setup_disabled(hass: HomeAssistant, config: ConfigType, entry):
     return True
 
 
-class HomieBase:
+# TODO: use also in TopicDict?! and/or implement bubbling in TopicDict?
+class Observable(object):
+    def __init__(self):
+        self._callbacks = []
+
+    def subscribe(self, callback):
+        self._callbacks.append(callback)
+
+    async def _async_call_subscribers(self, *attrs, **kwargs):
+        for fn in self._callbacks:
+            await fn(*attrs, **kwargs)
+
+
+class HomieBase(Observable):
     def __init__(
         self,
         hass: HomeAssistant,
         base_topic: str,
         qos: int = 0,
         topic_dict: TopicDict = None,
+        async_on_change: Any[Callable, None] = None,
     ):
+        Observable.__init__(self)
         self.id, self.base_topic = TopicDict.topic_get_head(base_topic)
 
         if self.id is False:
@@ -334,6 +382,9 @@ class HomieBase:
 
         self._hass = hass
         self._qos = qos
+
+        if async_on_change:
+            self.subscribe(async_on_change)
 
     async def _async_update(self, mqttmsg: ReceiveMessage):
         topic = mqttmsg.topic.removeprefix(self.base_topic).strip("/")
@@ -362,6 +413,8 @@ class HomieBase:
 
         # Call the async version
         self._hass.loop.create_task(self._async_update_topic_dict(topic, value))
+        # Call the subscribed functions (Observable)
+        self._hass.loop.create_task(self._async_call_subscribers(self, topic, value))
 
     @abstractmethod
     async def _async_update_topic_dict(self, topic, value):
@@ -375,16 +428,19 @@ class HomieBase:
 class HomieDevice(HomieBase):
     # A definition of a Homie Device
     def __init__(
-        self, hass: HomeAssistant, base_topic: str, qos: int, on_ready: Callable
+        self,
+        hass: HomeAssistant,
+        base_topic: str,
+        qos: int,
+        async_on_change: Any[Callable, None] = None,
     ):
-        super().__init__(hass, base_topic, qos)
+        super().__init__(hass, base_topic, qos, async_on_change=async_on_change)
 
         self.nodes: dict[str, HomieNode] = dict()
 
         self.topic_dict.add_include_topic("^\$")
 
         self._sub_state = None
-        self._on_ready = on_ready
 
     async def async_setup(self):
 
@@ -429,11 +485,6 @@ class HomieDevice(HomieBase):
                     self.nodes[node_id] = node
                     await node.async_setup()
 
-        # Ready
-        elif topic == "$state" and value == "ready":
-            await asyncio.sleep(10)
-            await self._on_ready(self, delayed=True)
-
     def node(self, node_id: str):
         """Return a specific Node for the device."""
         return self.nodes[node_id]
@@ -471,9 +522,13 @@ class HomieNode(HomieBase):
             for property_id in value.split(","):
                 if property_id not in self.properties:
                     # TODO: add properties restiction list
-                    node = HomieProperty(self, self.base_topic + "/" + property_id)
-                    self.properties[property_id] = node
-                    await node.async_setup()
+                    property = HomieProperty(self, self.base_topic + "/" + property_id)
+                    self.properties[property_id] = property
+                    await property.async_setup()
+
+    async def _async_call_subscribers(self, *attrs, **kwargs):
+        await super()._async_call_subscribers(*attrs, **kwargs)
+        await self.device._async_call_subscribers(*attrs, **kwargs)
 
     def has_property(self, property_id: str):
         """Return a specific Property for the node."""
@@ -499,6 +554,10 @@ class HomieProperty(HomieBase):
         self.async_unsubscribe_topics = await mqtt.async_subscribe(
             self._hass, f"{self.base_topic}/#", self._async_update, self._qos
         )
+
+    async def _async_call_subscribers(self, *attrs, **kwargs):
+        await super()._async_call_subscribers(*attrs, **kwargs)
+        await self.node._async_call_subscribers(*attrs, **kwargs)
 
     async def _async_update_topic_dict(self, topic, value):
         pass
