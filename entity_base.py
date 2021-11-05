@@ -176,16 +176,24 @@ async def async_get_homie_property(
     return device[node_id][property_id]
 
 
-@callback
-def async_post_process(config: ConfigType):
-    """Convert property topic in the dict form."""
+def schema_post_processing(config: ConfigType) -> ConfigType:
+    """Convert property topic path string in the dict form and
+    validate entry has at least one property value."""
+
+    if not (config.get(CONF_PROPERTY) or config.get(CONF_PROPERTY_TOPIC)):
+        raise vol.Invalid(
+            f"Platform must have at least '{CONF_PROPERTY}' or "
+            f"'{CONF_PROPERTY_TOPIC}' to indentify the Homie Property"
+        )
+
     if property_topic := config.get(CONF_PROPERTY_TOPIC):
 
         topic_split: list = property_topic.strip("/").split("/")[-3:]
 
         if len(topic_split) != 3:
             raise ValueError(
-                f"The {CONF_PROPERTY_TOPIC} ({property_topic}) is not in the right format!"
+                f"The '{CONF_PROPERTY_TOPIC}' ({property_topic}) "
+                "is not in the right format!"
             )
 
         config[CONF_PROPERTY] = dict(

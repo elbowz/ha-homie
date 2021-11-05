@@ -46,6 +46,11 @@ PLATFORM_SCHEMA = entity_base.SCHEMA_BASE.extend(
     }
 ).extend(switch.PLATFORM_SCHEMA.schema)
 
+# Whole schema validation and post processing
+PLATFORM_SCHEMA = vol.Schema(
+    vol.All(PLATFORM_SCHEMA, entity_base.schema_post_processing)
+)
+
 
 @logger()
 async def async_setup_platform(
@@ -53,7 +58,6 @@ async def async_setup_platform(
 ):
     """Called if exist a platform entry (ie. 'platform: homie') in configuration.yaml"""
     # Convert property topic to dict form and update config
-    entity_base.async_post_process(config)
     device_id = config[CONF_PROPERTY][CONF_DEVICE]
 
     setup = functools.partial(_async_setup_entity, hass, async_add_entities, config)
