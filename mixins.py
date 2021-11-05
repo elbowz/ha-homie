@@ -12,19 +12,17 @@ from homeassistant.helpers.dispatcher import (
 )
 from homeassistant.const import CONF_PLATFORM
 
-from .homie import HomieDevice, HomieProperty
+from .homie import HomieDevice
 from .utils import logger
 
 from .const import (
     DOMAIN,
-    DATA_KNOWN_DEVICES,
     HOMIE_DISCOVERY_NEW,
     SWITCH,
     CONF_PROPERTY,
     CONF_DEVICE,
     CONF_NODE,
     CONF_NAME,
-    CONF_PROPERTY_TOPIC,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -111,43 +109,3 @@ async def async_setup_entry_helper(hass, domain, async_setup, schema):
             raise
 
     async_dispatcher_connect(hass, HOMIE_DISCOVERY_NEW.format(domain), async_discover)
-
-
-async def async_entity_conf_get_property(hass, config: ConfigType) -> HomieProperty:
-    """"""
-    device_id = config[CONF_PROPERTY][CONF_DEVICE]
-    node_id = config[CONF_PROPERTY][CONF_NODE]
-    property_id = config[CONF_PROPERTY][CONF_NAME]
-
-    if (device := hass.data[DATA_KNOWN_DEVICES].get(device_id)) is None:
-        raise ValueError("Specified {device_id} not exist")
-
-    # TODO: convert HomieDevice and HomieNode .node/__getitem__ to async and raise a keyvalue exception
-
-    if not await device.async_has_node(node_id):
-        raise ValueError("Specified {node_id} not exist")
-    if not await device[node_id].async_has_property(property_id):
-        raise ValueError("Specified {property_id} not exist")
-
-    return device[node_id][property_id]
-
-
-@callback
-def async_entity_conf_post_process(config: ConfigType):
-    """Convert property topic in the dict form."""
-    if property_topic := config.get(CONF_PROPERTY_TOPIC):
-
-        topic_split: list = property_topic.strip("/").split("/")[-3:]
-
-        if len(topic_split) != 3:
-            raise ValueError(
-                f"The {CONF_PROPERTY_TOPIC} ({property_topic}) is not in the right format!"
-            )
-
-        config[CONF_PROPERTY] = dict(
-            zip((CONF_DEVICE, CONF_NODE, CONF_NAME), topic_split)
-        )
-
-        del config[CONF_PROPERTY_TOPIC]
-
-    return config
