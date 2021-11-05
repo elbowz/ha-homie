@@ -1,68 +1,60 @@
-# IMPORT
-import functools
 import logging
-
+import functools
 import voluptuous as vol
 
-from homeassistant.components import switch
-from homeassistant.components.mqtt.switch import MqttSwitch
-from homeassistant.components.switch import (
-    DEVICE_CLASSES_SCHEMA,
-    PLATFORM_SCHEMA,
-    SwitchEntity,
-)
-
-from homeassistant.components.mqtt import valid_subscribe_topic
-
-from homeassistant.core import HomeAssistant, callback
-import homeassistant.helpers.config_validation as cv
+from homeassistant.core import HomeAssistant
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers import device_registry, config_validation as cv
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.reload import async_setup_reload_service
 from homeassistant.helpers.typing import ConfigType
-
-from .helpers import bool2str, str2bool
-
-from .const import HOMIE_DISCOVERY_NEW, SWITCH
+from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from homeassistant.const import (
-    CONF_NAME,
     CONF_OPTIMISTIC,
-    CONF_ICON,
-    CONF_UNIQUE_ID,
-    CONF_DEVICE_CLASS,
     STATE_ON,
 )
 
-from . import (
+from homeassistant.components import switch
+from homeassistant.components.mqtt import valid_subscribe_topic
+
+from .homie import HomieDevice, HomieProperty
+from .homie.utils import bool2str, str2bool
+from .mixins import (
+    async_setup_entry_helper,
+    async_entity_conf_get_property,
+    async_entity_conf_post_process,
+)
+from .utils import logger
+
+from .const import (
     DOMAIN,
-    PLATFORMS,
-    HOMIE_CONFIG,
-    KEY_HOMIE_ALREADY_DISCOVERED,
-    KEY_HOMIE_ENTITY_NAME,
-    HomieDevice,
-    HomieProperty,
-    CONF_BASE_TOPIC,
     CONF_QOS,
     DEFAULT_QOS,
+    DATA_KNOWN_DEVICES,
+    HOMIE_DISCOVERY_NEW_DEVICE,
+    SWITCH,
     _VALID_QOS_SCHEMA,
+    CONF_NAME,
+    CONF_ICON,
+    CONF_UNIQUE_ID,
+    CONF_DEVICE_CLASS,
+    CONF_ENABLED_BY_DEFAULT,
+    CONF_DEVICE,
+    CONF_NODE,
+    CONF_PROPERTY,
+    CONF_PROPERTY_TOPIC,
     TRUE,
     FALSE,
 )
 
-# CONSTANTS
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_OPTIMISTIC = False
-CONF_ENABLED_BY_DEFAULT = "enabled_by_default"
-CONF_DEVICE = "device"
-CONF_NODE = "node"
-CONF_PROPERTY = "property"
-CONF_PROPERTY_TOPIC = "property_topic"
 
-# Common to PLATFROM
+# Common to PLATFROM (TODO: can be moved in shared lib)
 SCHEMA_BASE = {
     vol.Optional(CONF_NAME): cv.string,
-    vol.Optional(CONF_BASE_TOPIC): cv.string,
     vol.Optional(CONF_ICON): cv.icon,
     vol.Optional(CONF_UNIQUE_ID): cv.string,
     vol.Optional(CONF_ENABLED_BY_DEFAULT, default=True): cv.boolean,
@@ -77,144 +69,53 @@ SCHEMA_BASE = {
     vol.Exclusive(CONF_PROPERTY_TOPIC, "property"): valid_subscribe_topic,
 }
 
-HOMIE_BASE_PLATFORM_SCHEMA = cv.PLATFORM_SCHEMA.extend(SCHEMA_BASE)
+HOMIE_BASE_PLATFORM_SCHEMA = switch.PLATFORM_SCHEMA.extend(SCHEMA_BASE)
 
 
 PLATFORM_SCHEMA = HOMIE_BASE_PLATFORM_SCHEMA.extend(
     {
         vol.Optional(CONF_OPTIMISTIC, default=DEFAULT_OPTIMISTIC): cv.boolean,
-        # CONF_DEVICE_CLASS present in all entities but differ possible values by platfrom type
-        vol.Optional(CONF_DEVICE_CLASS): DEVICE_CLASSES_SCHEMA,
+        # CONF_DEVICE_CLASS present in all entities but differ possible values by platfrom types
+        vol.Optional(CONF_DEVICE_CLASS): switch.DEVICE_CLASSES_SCHEMA,
         # TODO: add "external" state_topic (device-node-property)
         # vol.Optional(CONF_STATE_TOPIC): valid_subscribe_topic,
     }
 )
 
 
+@logger()
 async def async_setup_platform(
     hass: HomeAssistant, config: ConfigType, async_add_entities, discovery_info=None
 ):
     """Called if exist a platform entry (ie. 'platform: homie') in configuration.yaml"""
-    # await async_setup_reload_service(hass, DOMAIN, PLATFORMS)
-    # await _async_setup_entity(hass, async_add_entities, config)
+    # Convert property topic to dict form and update config
+    async_entity_conf_post_process(config)
+    device_id = config[CONF_PROPERTY][CONF_DEVICE]
 
-    _LOGGER.debug("async_setup_platform() %s %s", config, hass.data.get(HOMIE_CONFIG))
-    return
-    device = HomieDevice(
-        hass,
-        "bdiot/thumbl-p-dev",
-        config.get(CONF_QOS),
-    )
+    setup = functools.partial(_async_setup_entity, hass, async_add_entities, config)
 
-    await device.async_setup()
-
-    if await device.async_has_node("light"):
-        if await device["light"].async_has_property("light"):
-            async_add_entities([HomieSwitch(hass, device["light"]["light"], config)])
+    # Avoid to create a new Home Device but wait its discovered first
+    async_dispatcher_connect(hass, HOMIE_DISCOVERY_NEW_DEVICE.format(device_id), setup)
 
 
+@logger()
 async def async_setup_entry(hass, config_entry, async_add_entities):
-    """Called by hass.config_entries.async_forward_entry_setup()
+    """Setup HomieProperty as HA switch dynamically through discovery
 
-    Thanks to the use of async_setup_entry() we can add device to registry.
-    https://developers.home-assistant.io/docs/device_registry_index#defining-devices
-    """
+    Called by hass.config_entries.async_forward_entry_setup() in async_setup_entry() component."""
     setup = functools.partial(
         _async_setup_entity, hass, async_add_entities, config_entry=config_entry
     )
 
-    _LOGGER.debug("async_setup_entry(): %s", config_entry)
-
-    # await async_setup_entry_helper(hass, switch.DOMAIN, setup, PLATFORM_SCHEMA)
-
-    async def async_discover(discovery_payload):
-        """Discover and add an Homie entity"""
-        # discovery_data = discovery_payload.discovery_data
-        # discovery_data = discovery_payload
-        # config = schema(discovery_payload)
-        # await async_setup(config, discovery_data=discovery_data)
-        _LOGGER.debug("async_discover(): %s", discovery_payload)
-
-        async_add_entities([HomieSwitch(hass, discovery_payload)])
-
-    async_dispatcher_connect(hass, HOMIE_DISCOVERY_NEW.format(SWITCH), async_discover)
+    # Listening on new domain platfrom (eg switch) discovered and init the setup
+    await async_setup_entry_helper(hass, SWITCH, setup, PLATFORM_SCHEMA)
 
 
-async def async_setup_entry_helper(hass, domain, async_setup, schema):
-    """Set up entity dynamically through Homie discovery."""
+async def _async_setup_entity(hass, async_add_entities, config, config_entry=None):
+    """Setup the HA switch with an HomieProperty."""
 
-    async def async_discover(discovery_payload):
-        """Discover and add an Homie entity"""
-        # discovery_data = discovery_payload.discovery_data
-        discovery_data = discovery_payload
-        config = schema(discovery_payload)
-        await async_setup(config, discovery_data=discovery_data)
-
-    async_dispatcher_connect(
-        hass, "homie_discovery_new".format(SWITCH, "homie"), async_discover
-    )
-
-
-async def _async_setup_entity(
-    hass, async_add_entities, config, config_entry=None, discovery_data=None
-):
-    """Set up the MQTT binary sensor."""
-
-    _LOGGER.debug("_async_setup_entity(): %s", config)
-
-    entity_name = config[KEY_HOMIE_ENTITY_NAME]
-    homie_sensor_node = hass.data[KEY_HOMIE_ALREADY_DISCOVERED][entity_name]
-
-    from typing import OrderedDict
-
-    config = OrderedDict(
-        [
-            ("payload_on", "true"),
-            ("payload_off", "false"),
-            ("optimistic", False),
-            # ("platform", "mqtt"),
-            ("name", "Switch fake"),
-            ("unique_id", "switch666"),
-            ("state_topic", "bdiot/thumbl-p-dev/light/light"),
-            ("command_topic", "bdiot/thumbl-p-dev/light/light/set"),
-            ("retain", False),
-            ("enabled_by_default", True),
-            ("payload_available", "online"),
-            ("availability_mode", "latest"),
-            ("payload_not_available", "offline"),
-            ("qos", 0),
-        ]
-    )
-
-    config_entry = None
-    discovery_data = None
-    # async_add_entities([HomieSwitch(hass, entity_name, homie_sensor_node)])
-    async_add_entities([MqttSwitch(hass, config, config_entry, discovery_data)])
-
-
-async def async_setup_platform_disabled(
-    hass: HomeAssistant, config: ConfigType, async_add_entities, discovery_info=None
-):
-    """Set up the Homie Switch."""
-    _LOGGER.info(f"Setting up Homie Switch: {config} - {discovery_info}")
-
-    entity_name = discovery_info[KEY_HOMIE_ENTITY_NAME]
-    homie_sensor_node = hass.data[KEY_HOMIE_ALREADY_DISCOVERED][entity_name]
-
-    _LOGGER.debug("properties: %s", homie_sensor_node.properties)
-
-    if homie_sensor_node is None:
-        raise ValueError("Homie Switch faild to recive a Homie Node to bind too")
-    if not homie_sensor_node.has_property(STATE_PROP):
-        raise Exception(f"Homie Switch Node doesnt have a {STATE_PROP} property")
-
-    async_add_entities([HomieSwitch(hass, entity_name, homie_sensor_node)])
-
-
-from homeassistant.helpers.entity import Entity
-from homeassistant.helpers import device_registry
-from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.config_entries import ConfigEntry
+    homie_property = await async_entity_conf_get_property(hass, config)
+    async_add_entities([HomieSwitch(hass, homie_property, config, config_entry)])
 
 
 class HomieEntity(Entity):
@@ -235,8 +136,6 @@ class HomieEntity(Entity):
 
         self._homie_node = homie_property.node
         self._homie_device = homie_property.node.device
-
-        self._unique_id = homie_property.base_topic.replace("/", "-")
 
     async def async_added_to_hass(self):
         """Subscribe mqtt events."""
@@ -332,10 +231,10 @@ class HomieEntity(Entity):
     @property
     def unique_id(self):
         """Return a unique ID."""
-        return self._config.get(CONF_UNIQUE_ID, self._unique_id)
+        return self._config.get(CONF_UNIQUE_ID, self._homie_property.base_topic)
 
 
-class HomieSwitch(HomieEntity, SwitchEntity, RestoreEntity):
+class HomieSwitch(HomieEntity, switch.SwitchEntity, RestoreEntity):
     """Implementation of a Homie Switch."""
 
     def __init__(
