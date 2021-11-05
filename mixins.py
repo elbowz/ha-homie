@@ -19,6 +19,7 @@ from .const import (
     DOMAIN,
     HOMIE_DISCOVERY_NEW,
     SWITCH,
+    BINARY_SENSOR,
     CONF_PROPERTY,
     CONF_DEVICE,
     CONF_NODE,
@@ -90,6 +91,15 @@ def async_discover_properties(
                     if not er.async_get_entity_id(SWITCH, DOMAIN, property.base_topic):
                         async_dispatcher_send(
                             hass, HOMIE_DISCOVERY_NEW.format(SWITCH), discovery_payload
+                        )
+                else:
+                    if not er.async_get_entity_id(
+                        BINARY_SENSOR, DOMAIN, property.base_topic
+                    ):
+                        async_dispatcher_send(
+                            hass,
+                            HOMIE_DISCOVERY_NEW.format(BINARY_SENSOR),
+                            discovery_payload,
                         )
 
 

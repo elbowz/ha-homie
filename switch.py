@@ -36,7 +36,6 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_OPTIMISTIC = False
 
-
 PLATFORM_SCHEMA = entity_base.SCHEMA_BASE.extend(
     {
         vol.Optional(CONF_OPTIMISTIC, default=DEFAULT_OPTIMISTIC): cv.boolean,
