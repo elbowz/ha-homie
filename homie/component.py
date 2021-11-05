@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import asyncio
 from abc import abstractmethod
-from typing import Any, Callable
+from typing import Callable
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.components import mqtt
@@ -21,7 +21,7 @@ class HomieBase(Observable):
         base_topic: str,
         qos: int = 0,
         topic_dict: TopicDict = None,
-        async_on_change: Any[Callable, None] = None,
+        async_on_change: Callable | None = None,
     ):
         Observable.__init__(self)
         self.id, self.base_topic = TopicDict.topic_get_head(base_topic)
@@ -103,7 +103,7 @@ class HomieDevice(HomieBase):
         hass: HomeAssistant,
         base_topic: str,
         qos: int,
-        async_on_change: Any[Callable, None] = None,
+        async_on_change: Callable | None = None,
     ):
         super().__init__(hass, base_topic, qos, async_on_change=async_on_change)
 

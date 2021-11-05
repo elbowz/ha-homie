@@ -229,10 +229,6 @@ async def _async_setup_discovery(
     # @logger()
     async def async_device_on_change(homie_component, topic, value):
 
-        # if isinstance(homie_component, HomieDevice):
-        #     _LOGGER.debug("%s %s %s", homie_component.id, topic, value)
-
-        # Ready
         if (
             isinstance(homie_component, HomieDevice)
             and topic == "$state"

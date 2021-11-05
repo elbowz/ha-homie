@@ -92,7 +92,7 @@ class HomieBinarySensor(entity_base.HomieEntity, binary_sensor.BinarySensorEntit
         )
 
     async def _async_on_property_change(self, homie_property, topic, value):
-        """Callend on property topic change."""
+        """Called on property topic change."""
 
         # Apply a delay (CONF_OFF_DELAY) on False
         if (
