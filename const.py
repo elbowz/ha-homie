@@ -43,6 +43,7 @@ PROPERTY = CONF_PROPERTY
 
 from homeassistant.components.switch import DOMAIN as SWITCH
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR
+from homeassistant.components.sensor import DOMAIN as SENSOR
 
 # supported platfroms
-PLATFORMS = [SWITCH, BINARY_SENSOR]
+PLATFORMS = [SWITCH, BINARY_SENSOR, SENSOR]

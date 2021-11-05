@@ -20,6 +20,7 @@ from .const import (
     HOMIE_DISCOVERY_NEW,
     SWITCH,
     BINARY_SENSOR,
+    SENSOR,
     CONF_PROPERTY,
     CONF_DEVICE,
     CONF_NODE,
@@ -69,6 +70,12 @@ def async_discover_properties(
     if er is None:
         er = entity_registry.async_get(hass)
 
+    def fire_homie_discovery_new(platform: str, unique_id: str, payload: ConfigType):
+        if not er.async_get_entity_id(platform, DOMAIN, unique_id):
+            async_dispatcher_send(
+                hass, HOMIE_DISCOVERY_NEW.format(platform), discovery_payload
+            )
+
     for node in device.nodes.values():
         for property in node.properties.values():
 
@@ -86,21 +93,23 @@ def async_discover_properties(
                 }
             }
 
-            if property.datatype == "boolean":
-                if property.settable:
-                    if not er.async_get_entity_id(SWITCH, DOMAIN, property.base_topic):
-                        async_dispatcher_send(
-                            hass, HOMIE_DISCOVERY_NEW.format(SWITCH), discovery_payload
-                        )
+            platform_domain = None
+
+            if property.settable:
+                # Actuators
+                if property.datatype == "boolean":
+                    platform_domain = SWITCH
+            else:
+                # Sensors
+                if property.datatype == "boolean":
+                    platform_domain = BINARY_SENSOR
                 else:
-                    if not er.async_get_entity_id(
-                        BINARY_SENSOR, DOMAIN, property.base_topic
-                    ):
-                        async_dispatcher_send(
-                            hass,
-                            HOMIE_DISCOVERY_NEW.format(BINARY_SENSOR),
-                            discovery_payload,
-                        )
+                    platform_domain = SENSOR
+
+            if platform_domain:
+                fire_homie_discovery_new(
+                    platform_domain, property.base_topic, discovery_payload
+                )
 
 
 async def async_setup_entry_helper(hass, domain, async_setup, schema):
