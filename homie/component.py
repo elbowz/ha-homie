@@ -253,11 +253,10 @@ class HomieProperty(HomieBase):
     # async def _async_update_topic_dict(self, topic, value):
     #     pass
 
-    @callback
-    def async_set(self, value: str):
+    async def async_set(self, value: str):
         """Set the state of the Property."""
         if self.settable:
-            mqtt.async_publish(
+            await mqtt.async_publish(
                 self._hass, f"{self.base_topic}/set", value, self._qos, retain=True
             )
 
