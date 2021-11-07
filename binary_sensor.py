@@ -47,7 +47,6 @@ async def async_setup_platform(
     hass: HomeAssistant, config: ConfigType, async_add_entities, discovery_info=None
 ):
     """Called if exist a platform entry (ie. 'platform: homie') in configuration.yaml"""
-    # Convert property topic to dict form and update config
     device_id = config[CONF_PROPERTY][CONF_DEVICE]
 
     setup = functools.partial(_async_setup_entity, hass, async_add_entities, config)

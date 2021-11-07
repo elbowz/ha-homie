@@ -21,6 +21,7 @@ from .const import (
     SWITCH,
     BINARY_SENSOR,
     SENSOR,
+    NUMBER,
     CONF_PROPERTY,
     CONF_DEVICE,
     CONF_NODE,
@@ -76,6 +77,7 @@ def async_discover_properties(
                 hass, HOMIE_DISCOVERY_NEW.format(platform), discovery_payload
             )
 
+    # TODO: implement await device.nodes()
     for node in device.nodes.values():
         for property in node.properties.values():
 
@@ -99,6 +101,8 @@ def async_discover_properties(
                 # Actuators
                 if property.datatype == "boolean":
                     platform_domain = SWITCH
+                elif property.datatype in ["integer", "float", "percent"]:
+                    platform_domain = NUMBER
             else:
                 # Sensors
                 if property.datatype == "boolean":
