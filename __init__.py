@@ -210,6 +210,30 @@ async def _async_setup_discovery(
             # Check if already discovered and added
             if device_id not in devices:
 
+                # TODO: add on_rady to device instead of async_on_change?
+                ready = False
+
+                # @logger()
+                async def async_device_on_change(homie_component, topic, value):
+                    nonlocal ready
+
+                    # TODO: use debounce and once fire
+                    if (
+                        isinstance(homie_component, HomieDevice)
+                        and topic == "$state"
+                        and value == "ready"
+                        and ready is False
+                    ):
+                        ready = True
+                        await asyncio.sleep(10)
+
+                        # TODO: check include/exclude on device.base_topic
+
+                        async_create_ha_device(hass, homie_component, entry)
+
+                        if discovery_enabled:
+                            async_discover_properties(hass, homie_component)
+
                 device = HomieDevice(
                     hass,
                     f"{device_prefix_topic}/{device_id}",
@@ -225,23 +249,6 @@ async def _async_setup_discovery(
                 dispatcher.async_dispatcher_send(
                     hass, HOMIE_DISCOVERY_NEW_DEVICE.format(device_id)
                 )
-
-    # @logger()
-    async def async_device_on_change(homie_component, topic, value):
-
-        if (
-            isinstance(homie_component, HomieDevice)
-            and topic == "$state"
-            and value == "ready"
-        ):
-            await asyncio.sleep(10)
-
-            # TODO: check include/exclude on device.base_topic
-
-            async_create_ha_device(hass, homie_component, entry)
-
-            if discovery_enabled:
-                async_discover_properties(hass, homie_component)
 
     async def async_destroy(event):
         """Stuff to do on close"""
