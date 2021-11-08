@@ -4,14 +4,9 @@
   "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/muttley",
   "requirements": [],
-  "ssdp": [],
-  "zeroconf": [],
-  "homekit": {},
   "dependencies": ["mqtt"],
-  "mqtt": ["bdiot/thumbl-p-dev/$state"],
-  "codeowners": [
-    "@elbowz"
-  ],
+  "mqtt": ["+/+/$homie"],
+  "codeowners": ["@elbowz"],
   "iot_class": "local_push",
   "version": "0.0.1"
 }

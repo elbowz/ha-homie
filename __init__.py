@@ -74,8 +74,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     # No DOMAIN entry in configuration.yaml
     if conf is None:
+        return True
         # Return True if a config entry (ie UI form / config flow) exist
-        return bool(hass.config_entries.async_entries(DOMAIN))
+        # note: If return false also after an UI setup I need to retart HA to load the confi_entry
+        # return bool(hass.config_entries.async_entries(DOMAIN))
 
     conf = dict(conf)
 
