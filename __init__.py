@@ -133,7 +133,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Merge/extend configuration.yaml config with config entry
     conf = {**conf, **entry.data}
 
-    async def setup_platforms():
+    async def async_setup_platforms():
         """Setup platforms."""
 
         # Call the async_setup_entry(entry, platform) of the supportted platforms
@@ -144,7 +144,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
         )
 
-    hass.async_create_task(setup_platforms())
+    hass.async_create_task(async_setup_platforms())
 
     # Starting devices discovery
     await _async_setup_discovery(hass, conf, entry)

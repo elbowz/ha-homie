@@ -5,7 +5,10 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_connect,
+    async_dispatcher_send,
+)
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.restore_state import RestoreEntity
 
@@ -23,6 +26,7 @@ from .mixins import async_setup_entry_helper
 from .utils import logger
 
 from .const import (
+    HOMIE_DISCOVERY_NEW,
     HOMIE_DISCOVERY_NEW_DEVICE,
     SWITCH,
     CONF_DEVICE_CLASS,
@@ -57,10 +61,13 @@ async def async_setup_platform(
     hass: HomeAssistant, config: ConfigType, async_add_entities, discovery_info=None
 ):
     """Called if exist a platform entry (ie. 'platform: homie') in configuration.yaml"""
-    # Convert property topic to dict form and update config
     device_id = config[CONF_PROPERTY][CONF_DEVICE]
 
-    setup = functools.partial(_async_setup_entity, hass, async_add_entities, config)
+    # Workaround to bind entity and device (calling directly "_async_setup_entity" don't work)
+    # setup = functools.partial(_async_setup_entity, hass, async_add_entities, config)
+    setup = functools.partial(
+        async_dispatcher_send, hass, HOMIE_DISCOVERY_NEW.format(SWITCH), config
+    )
 
     # Avoid to create a new Home Device but wait its discovered first
     async_dispatcher_connect(hass, HOMIE_DISCOVERY_NEW_DEVICE.format(device_id), setup)
@@ -108,6 +115,7 @@ class HomieSwitch(entity_base.HomieEntity, switch.SwitchEntity, RestoreEntity):
 
         await super().async_added_to_hass()
 
+        # TODO: Homie is retain by default, so I think can be removed
         if self._optimistic:
             last_state = await self.async_get_last_state()
             if last_state:
@@ -121,7 +129,7 @@ class HomieSwitch(entity_base.HomieEntity, switch.SwitchEntity, RestoreEntity):
     @logger()
     async def async_turn_on(self, **kwargs):
         """Turn the device on."""
-        self._homie_property.async_set(TRUE)
+        await self._homie_property.async_set(TRUE)
 
         if self._optimistic:
             # Optimistically assume that switch has changed state.
@@ -131,7 +139,7 @@ class HomieSwitch(entity_base.HomieEntity, switch.SwitchEntity, RestoreEntity):
     @logger()
     async def async_turn_off(self, **kwargs):
         """Turn the device off."""
-        self._homie_property.async_set(FALSE)
+        await self._homie_property.async_set(FALSE)
 
         if self._optimistic:
             # Optimistically assume that switch has changed state.

@@ -7,7 +7,10 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.dispatcher import (
+    async_dispatcher_connect,
+    async_dispatcher_send,
+)
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.restore_state import RestoreEntity
 
@@ -19,11 +22,11 @@ from homeassistant.components import sensor
 
 from . import entity_base
 from .homie import HomieProperty
-from .homie.utils import bool2str, str2bool
 from .mixins import async_setup_entry_helper
 from .utils import logger
 
 from .const import (
+    HOMIE_DISCOVERY_NEW,
     HOMIE_DISCOVERY_NEW_DEVICE,
     SENSOR,
     CONF_DEVICE_CLASS,
@@ -57,7 +60,11 @@ async def async_setup_platform(
     """Called if exist a platform entry (ie. 'platform: homie') in configuration.yaml"""
     device_id = config[CONF_PROPERTY][CONF_DEVICE]
 
-    setup = functools.partial(_async_setup_entity, hass, async_add_entities, config)
+    # Workaround to bind entity and device (calling directly "_async_setup_entity" don't work)
+    # setup = functools.partial(_async_setup_entity, hass, async_add_entities, config)
+    setup = functools.partial(
+        async_dispatcher_send, hass, HOMIE_DISCOVERY_NEW.format(SENSOR), config
+    )
 
     # Avoid to create a new Home Device but wait its discovered first
     async_dispatcher_connect(hass, HOMIE_DISCOVERY_NEW_DEVICE.format(device_id), setup)
