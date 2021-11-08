@@ -21,7 +21,7 @@ class HomieBase(Observable):
         base_topic: str,
         qos: int = 0,
         topic_dict: TopicDict = None,
-        async_on_change: Callable | None = None,
+        async_on_ready: Callable | None = None,
     ):
         Observable.__init__(self)
         self.id, self.base_topic = TopicDict.topic_get_head(base_topic)
@@ -35,45 +35,20 @@ class HomieBase(Observable):
         self.topic_dict = topic_dict if topic_dict else TopicDict()
         self.topic_dict.subscribe(self._async_update_topic_dict)
 
+        self._async_on_ready = async_on_ready
         self._hass = hass
         self._qos = qos
 
         self._asyncio_event = dict()
 
-        if async_on_change:
-            self.subscribe(async_on_change)
-
     async def _async_update(self, mqttmsg: mqtt.models.ReceiveMessage):
         topic = mqttmsg.topic.removeprefix(self.base_topic).strip("/")
-
-        # _LOGGER.debug(
-        #     "%s._async_update() %s (%s) -> %s",
-        #     self.__class__.__name__,
-        #     mqttmsg.topic,
-        #     topic,
-        #     mqttmsg.payload,
-        # )
 
         if topic == "":
             self.topic_dict.value = mqttmsg.payload
         else:
             self.topic_dict[topic] = mqttmsg.payload
 
-    # def _update_topic_dict(self, topic, value):
-
-    #     # _LOGGER.debug(
-    #     #     "%s._update_topic_dict %s -> %s",
-    #     #     self.__class__.__name__,
-    #     #     topic,
-    #     #     value,
-    #     # )
-
-    #     # Call the async version
-    #     self._hass.loop.create_task(self._async_update_topic_dict(topic, value))
-    #     # Call the subscribed functions (Observable)
-    #     self._call_subscribers(self, topic, value)
-
-    @abstractmethod
     async def _async_update_topic_dict(self, topic, value):
         self._call_subscribers(self, topic, value)
         # raise NotImplementedError()
@@ -103,14 +78,15 @@ class HomieDevice(HomieBase):
         hass: HomeAssistant,
         base_topic: str,
         qos: int,
-        async_on_change: Callable | None = None,
+        async_on_ready: Callable | None = None,
     ):
-        super().__init__(hass, base_topic, qos, async_on_change=async_on_change)
+        super().__init__(hass, base_topic, qos, async_on_ready=async_on_ready)
 
         self.nodes: dict[str, HomieNode] = dict()
 
         self.topic_dict.add_include_topic("^\$")
 
+        self._ready = False
         self._sub_state = None
 
     async def async_setup(self):
@@ -149,7 +125,19 @@ class HomieDevice(HomieBase):
     async def _async_update_topic_dict(self, topic, value):
         await super()._async_update_topic_dict(topic, value)
 
-        if topic == "$nodes":
+        if topic == "$state" and value == "ready" and self._ready is False:
+            self._ready = True
+            # Wait nodes and sub-properties are init
+            await self._event_wait("nodes-init")
+            await asyncio.gather(*(node.async_ready() for node in self.nodes.values()))
+            # delay to allow fill the subscribed topics
+            await asyncio.sleep(6)
+
+            self._event_fire("ready")
+            if self._async_on_ready:
+                await self._async_on_ready(self)
+
+        elif topic == "$nodes":
             for node_id in value.split(","):
                 # TODO: add nodes restiction list
                 if node_id not in self.nodes:
@@ -171,6 +159,10 @@ class HomieDevice(HomieBase):
     def node(self, node_id: str):
         """Return a specific Node for the device."""
         return self.nodes[node_id]
+
+    async def async_ready(self):
+        """Wait since the device is ready."""
+        return await self._event_wait("ready")
 
     def __getitem__(self, node_id: str):
         return self.node(node_id)
@@ -211,6 +203,7 @@ class HomieNode(HomieBase):
                     await property.async_setup()
 
             self._event_fire("properties-init")
+            self._event_fire("ready")
 
     def _call_subscribers(self, *attrs, **kwargs):
         super()._call_subscribers(*attrs, **kwargs)
@@ -228,6 +221,10 @@ class HomieNode(HomieBase):
     def property(self, property_id: str):
         """Return a specific Property for the Node."""
         return self.properties[property_id]
+
+    async def async_ready(self):
+        """Wait since the node is ready."""
+        return await self._event_wait("ready")
 
     def __getitem__(self, property_id: str):
         return self.property(property_id)

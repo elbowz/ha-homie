@@ -3,7 +3,7 @@ import asyncio
 import logging
 import voluptuous as vol
 
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers import device_registry, dispatcher, config_validation as cv
@@ -26,8 +26,6 @@ from .const import (
     DOMAIN,
     DATA_HOMIE_CONFIG,
     DATA_KNOWN_DEVICES,
-    CONF_DEVICE,
-    CONF_PROPERTY,
     CONF_BASE_TOPIC,
     CONF_DISCOVERY,
     CONF_QOS,
@@ -38,10 +36,8 @@ from .const import (
     DEFAULT_QOS,
     DEFAULT_DISCOVERY,
     PLATFORMS,
-    HOMIE_DISCOVERY_NEW,
     HOMIE_DISCOVERY_NEW_DEVICE,
     HOMIE_SUPPORTED_VERSION,
-    DEVICE,
 )
 
 CONFIG_SCHEMA = vol.Schema(
@@ -62,11 +58,9 @@ CONFIG_SCHEMA = vol.Schema(
             }
         ),
     },
-    # TODO: try to remove?
     extra=vol.ALLOW_EXTRA,
 )
 
-# GLOBALS
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -152,19 +146,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return True
 
 
-# def _merge_config(entry, conf):
-#     """Merge configuration.yaml config with config entry."""
-#     return {**conf, **entry.data}
-
-
-# DELETE
-# import types
-
-# def imports():
-#     for name, val in globals().items():
-#         if isinstance(val, types.ModuleType):
-#             yield val.__name__
-
 # REGEX
 DISCOVER_DEVICE = re.compile(
     r"(?P<prefix_topic>\w[-/\w]*\w)/(?P<device_id>\w[-\w]*\w)/\$homie"
@@ -210,45 +191,33 @@ async def _async_setup_discovery(
             # Check if already discovered and added
             if device_id not in devices:
 
-                # TODO: add on_rady to device instead of async_on_change?
-                ready = False
-
-                # @logger()
-                async def async_device_on_change(homie_component, topic, value):
-                    nonlocal ready
-
-                    # TODO: use debounce and once fire
-                    if (
-                        isinstance(homie_component, HomieDevice)
-                        and topic == "$state"
-                        and value == "ready"
-                        and ready is False
-                    ):
-                        ready = True
-                        await asyncio.sleep(10)
-
-                        # TODO: check include/exclude on device.base_topic
-
-                        async_create_ha_device(hass, homie_component, entry)
-
-                        if discovery_enabled:
-                            async_discover_properties(hass, homie_component)
-
                 device = HomieDevice(
                     hass,
                     f"{device_prefix_topic}/{device_id}",
                     qos,
-                    async_device_on_change,
+                    async_device_on_ready,
                 )
 
                 devices[device_id] = device
 
+                # Init (topics subscribe) device
                 await device.async_setup()
 
-                # Fire event to inform the presence of a new device
+                # Fire event to inform the presence of a new device in the global (hass.data) var
                 dispatcher.async_dispatcher_send(
                     hass, HOMIE_DISCOVERY_NEW_DEVICE.format(device_id)
                 )
+
+    # @logger()
+    async def async_device_on_ready(homie_device):
+        # TODO: check include/exclude on device.base_topic
+
+        # Add/update device to HA device registry
+        async_create_ha_device(hass, homie_device, entry)
+
+        if discovery_enabled:
+            #
+            async_discover_properties(hass, homie_device)
 
     async def async_destroy(event):
         """Stuff to do on close"""

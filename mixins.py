@@ -26,6 +26,7 @@ from .const import (
     CONF_DEVICE,
     CONF_NODE,
     CONF_NAME,
+    CONF_PROPERTY_TOPIC,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -72,6 +73,8 @@ def async_discover_properties(
         er = entity_registry.async_get(hass)
 
     def fire_homie_discovery_new(platform: str, unique_id: str, payload: ConfigType):
+        """Fire new platform discovered."""
+        # If entity is not already added
         if not er.async_get_entity_id(platform, DOMAIN, unique_id):
             async_dispatcher_send(
                 hass, HOMIE_DISCOVERY_NEW.format(platform), discovery_payload
@@ -82,18 +85,6 @@ def async_discover_properties(
         for property in node.properties.values():
 
             # TODO: check include/exclude on property.base_topic
-
-            # Entity already in the registry (use base_topic as unique_id)
-            # if er.async_is_registered(property.base_topic):
-            #     return False
-
-            discovery_payload = {
-                CONF_PROPERTY: {
-                    CONF_DEVICE: device.id,
-                    CONF_NODE: node.id,
-                    CONF_NAME: property.id,
-                }
-            }
 
             platform_domain = None
 
@@ -111,6 +102,16 @@ def async_discover_properties(
                     platform_domain = SENSOR
 
             if platform_domain:
+                discovery_payload = {
+                    CONF_PROPERTY: {
+                        CONF_DEVICE: device.id,
+                        CONF_NODE: node.id,
+                        CONF_NAME: property.id,
+                    },
+                    # ...or simply pass
+                    # CONF_PROPERTY_TOPIC: property.base_topic
+                }
+
                 fire_homie_discovery_new(
                     platform_domain, property.base_topic, discovery_payload
                 )
