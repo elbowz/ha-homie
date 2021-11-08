@@ -76,7 +76,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     if conf is None:
         return True
         # Return True if a config entry (ie UI form / config flow) exist
-        # note: If return false also after an UI setup I need to retart HA to load the confi_entry
+        # note: If return False also after an UI setup I need to retart HA to load the config_entry
         # return bool(hass.config_entries.async_entries(DOMAIN))
 
     conf = dict(conf)

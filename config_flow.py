@@ -17,6 +17,7 @@ from homeassistant.helpers.typing import DiscoveryInfoType
 
 from .const import (
     DOMAIN,
+    DATA_HOMIE_CONFIG,
     CONF_BASE_TOPIC,
     DEFAULT_BASE_TOPIC,
     CONF_QOS,
@@ -58,7 +59,7 @@ class HomieConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_mqtt(self, discovery_info: DiscoveryInfoType) -> FlowResult:
         """Handle a flow initialized by mqtt discovery ("mqtt" in manifest.json)."""
-        # Check if there is something already configured or in progress
+        # Abort if there is something already configured or in progress
         if self._async_in_progress() or self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
 
@@ -75,6 +76,7 @@ class HomieConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
+        # Abort if there is something already configured (ie only one configuration)
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
 
@@ -96,12 +98,51 @@ class HomieConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(config_entry):
         """Get the options flow for this handler."""
-        # ?? CALLED ON BUTTON "CONFIGURE"
-        return OptionsFlowHandler(config_entry)
+        return HomieOptionsFlowHandler(config_entry)
 
 
-class OptionsFlowHandler(config_entries.OptionsFlow):
+class HomieOptionsFlowHandler(config_entries.OptionsFlow):
     """Handles options flow for the component."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] = None
+    ) -> dict[str, Any]:
+        """Handle the initial step."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                mqtt.valid_subscribe_topic(user_input.get(CONF_BASE_TOPIC))
+                pass
+            except vol.Invalid:
+                errors["base"] = "invalid_base_topic"
+            if not errors:
+                # Update config entry
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry, data=user_input
+                )
+                return self.async_create_entry(title="", data=None)
+
+        # Merge yaml and config_entry to produce the form pre-fill value
+        conf = {**self.hass.data.get(DATA_HOMIE_CONFIG), **self.config_entry.data}
+
+        base_topic = conf.get(CONF_BASE_TOPIC)
+        qos = conf.get(CONF_QOS)
+        discovery = conf.get(CONF_DISCOVERY)
+
+        MOD_CONFIG_SCHEMA = vol.Schema(
+            {
+                vol.Optional(CONF_BASE_TOPIC, default=base_topic): cv.string,
+                vol.Optional(CONF_QOS, default=qos): _VALID_QOS_SCHEMA,
+                vol.Optional(
+                    CONF_DISCOVERY,
+                    default=discovery,
+                ): cv.boolean,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="init", data_schema=MOD_CONFIG_SCHEMA, errors=errors
+        )
