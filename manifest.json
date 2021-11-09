@@ -1,6 +1,6 @@
 {
   "domain": "homie",
-  "name": "Homie Integration",
+  "name": "Homie",
   "config_flow": true,
   "documentation": "https://www.home-assistant.io/integrations/muttley",
   "requirements": [],
