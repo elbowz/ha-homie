@@ -120,7 +120,19 @@ class HomieEntity(Entity):
         """Return the device info."""
         mac = device_registry.format_mac(self._homie_device.t["$mac"])
 
-        return {"identifiers": {(DOMAIN, mac)}}
+        # map HomieDevice and DeviceEntry attrs
+        return {
+            "config_entry_id": self._config_entry.entry_id,
+            "identifiers": {(DOMAIN, mac)},
+            "connections": {(device_registry.CONNECTION_NETWORK_MAC, mac)},
+            "name": self._homie_device.t.get("$name", self._homie_device.id),
+            "model": self._homie_device.t["$implementation"],
+            "manufacturer": f"homie-{self._homie_device.t['$homie']}",
+            "sw_version": self._homie_device.t["$fw/version"],
+        }
+
+        # note: using only identifiers (as foreign key) could create trouble when no device is in the device registry (ie device not ready)
+        # return {"identifiers": {(DOMAIN, mac)}}
 
     @property
     def should_poll(self):
