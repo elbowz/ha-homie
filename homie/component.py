@@ -60,7 +60,7 @@ class HomieBase(Observable):
         event = self._asyncio_event.setdefault(name, asyncio.Event())
 
         try:
-            await asyncio.wait_for(event.wait(), timeout=10)
+            await asyncio.wait_for(event.wait(), timeout=timeout)
         except asyncio.TimeoutError:
             return False
 

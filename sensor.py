@@ -90,6 +90,7 @@ async def _async_setup_entity(hass, async_add_entities, config, config_entry=Non
     async_add_entities([HomieSensor(hass, homie_property, config, config_entry)])
 
 
+# TODO: remove RestoreEntity
 class HomieSensor(entity_base.HomieEntity, sensor.SensorEntity, RestoreEntity):
     """Implementation of a Homie Sensor."""
 

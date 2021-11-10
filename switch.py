@@ -115,7 +115,7 @@ class HomieSwitch(entity_base.HomieEntity, switch.SwitchEntity, RestoreEntity):
 
         await super().async_added_to_hass()
 
-        # TODO: Homie is retain by default, so I think can be removed
+        # TODO: Homie is retain by default, so I think can be removed (RestoreEntity)
         if self._optimistic:
             last_state = await self.async_get_last_state()
             if last_state:

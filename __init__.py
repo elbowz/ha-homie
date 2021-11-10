@@ -218,7 +218,6 @@ async def _async_setup_discovery(
         async_create_ha_device(hass, homie_device, entry)
 
         if discovery_enabled:
-            #
             async_discover_properties(hass, homie_device)
 
     async def async_destroy(event):
