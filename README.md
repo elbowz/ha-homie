@@ -17,19 +17,20 @@
 
 ## About The Project
 
-The integration is born (and maybe will dead) as University project. The project is born from the old, abandoned and closed issue [Compatibility with Home Assistant MQTT Discovery](https://github.com/homieiot/homie-esp8266/issues/306).
+This HomeAssistant integration is born (and maybe will dead) as University project. The project was started from the old, abandoned and closed issue [Compatibility with Home Assistant MQTT Discovery](https://github.com/homieiot/homie-esp8266/issues/306).
 
 ## Getting Started
 
 ### Installation
 
-Download the zip from `Code/Download ZIP` and uncompress in the HA `custom_components` directory:
+Download the zip from `Code/Download ZIP` and uncompress the `homie` folder in the HA `custom_components` directory:
 
 ```bash
 cd YOUR_HA_CONFIG_DIRECTORY		# same place as configuration.yaml
 mkdir -p custom_components/homie
-cd custom_components/homie
-unzip master.zip
+unzip ha-homie-master.zip 
+mv ha-homie-master/homie custom_components
+rm ha-homie-master.zip
 ```
 
 Alternatively, you can install the current GitHub master version by cloning and copying:
@@ -39,19 +40,20 @@ mkdir SOME_LOCAL_WORKSPACE
 cd SOME_LOCAL_WORKSPACE
 git clone https://github.com/elbowz/ha-homie.git
 mkdir -p YOUR_HASS_CONFIG_DIRECTORY/custom_components
-cp -pr ha-homie YOUR_HASS_CONFIG_DIRECTORY/custom_components
+cp -r ha-homie/homie YOUR_HASS_CONFIG_DIRECTORY/custom_components
 ```
 
 Restart Home assistant
 
-> **tip**: if you have some Homie devices in your network, you should just see the discovery tile in home assistant, that advice to install this integration
+> **tip**: if you have some Homie devices in your network, you should already see the discovery tile in home assistant, that advice to configure this integration
 
 ## Configuration
 
 Go to the Integrations menu in the Home Assistant Configuration UI and add `Homie` from there.
 
-Alternatively, add `homie:` to `<config>/configuration.yaml`
-You can use yaml configuration or UI configuration, but remember that the UI options overwrite the the file config.
+Alternatively, add `homie:` to `<config>/configuration.yaml`.
+
+> **note**: you can use yaml configuration or UI configuration, but remember that the UI options overwrite the yaml config.
 
 ```yaml
 homie:
@@ -60,8 +62,9 @@ homie:
   discovery: true
 ```
 
-The Homie base discovery topic is `+/+/$homie`. You can restrict using the `base_topic`.
-eg. `base_topic = root` the discovery topic become: `root/+/$homie`
+The Homie base discovery topic is `+/+/$homie`. You can restrict using the `base_topic` option.
+
+eg. `base_topic = root` => the discovery topic become: `root/+/$homie`
 
 ## Manual Configuration
 
@@ -69,12 +72,12 @@ With `discovery: true` all the recognised devices properties (and related attrib
 
 The supported platfrom are:
 
-- Switch
-- Binary sensor
-- Sensor
-- Number
+* **Switch**
+* **Binary sensor**
+* **Sensor**
+* **Number**
 
-Switch example:
+`configuration.yaml` switch example:
 
 ```yaml
 switch:
@@ -92,9 +95,9 @@ switch:
     device_class: outlet
 ```
 
-> **tip**: enable discovery and take `base_topic` from HA entity attributes. There are also stored other device information (eg. stats, IP, etc...)
+> **tip**: enable discovery and take `base_topic` from HA entity attributes. There will find also stored other device information (eg. stats, IP, etc...)
 
-### Shared config between platform
+### Shared config options between platform
 
 ```yaml
 name: name displayed
@@ -143,7 +146,7 @@ unit_of_measurement: s
 
 ## Integration development 
 
-For didactic purpose (or who is interested) here can see information/documentation about the integration deelopment model.
+For didactic purpose (or who is interested) here can see information/documentation about the Homie custom component development model.
 
 ### Class Diagram
 
@@ -162,7 +165,7 @@ Distributed under the GPL License. See [LICENSE][license-url] for more informati
 - [Homie convetion](https://homieiot.github.io/)
 - [Homie for ESP8266 / ESP32](https://github.com/homieiot/homie-esp8266)
 - [Home Assistant](https://www.home-assistant.io/)
-- [HA_Homie](https://github.com/nerdfirefighter/HA_Homie) - Closed/broken old integration...for inspiration
+- [HA_Homie](https://github.com/nerdfirefighter/HA_Homie) - Closed/broken old integration...used for inspiration
 
 [issues-shield]: https://img.shields.io/github/issues/elbowz/ha-homie.svg?style=for-the-badge
 [issues-url]: https://github.com/elbowz/ha-homie/issues
