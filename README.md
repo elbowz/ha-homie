@@ -141,6 +141,18 @@ mode: auto/slider/box
 unit_of_measurement: s
 ```
 
+## Integration development 
+
+For didactic purpose (or who is interested) here can see information/documentation about the integration deelopment model.
+
+### Class Diagram
+
+![class diagram](imgs/class-diagram.png)
+
+### Flow chart
+
+![class diagram](imgs/flow-chart.png)
+
 ## License
 
 Distributed under the GPL License. See [LICENSE][license-url] for more information.
