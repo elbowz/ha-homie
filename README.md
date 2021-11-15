@@ -5,13 +5,11 @@
 [![LinkedIn][linkedin-shield]][linkedin-url]
 
 <p align="center">
-<h1 align="center">HA Hommie</h1>
-<h3 align="center">Homie integration for Home Assistant</h3>
-
+  <img src="imgs/logo.png" alt="HA Homie" width="80">
+  <h3 align="center">Homie integration for Home Assistant</h3>
   <p align="center">
     Autodiscover and/or manual Homie devices configuration
   </p>
-
 </p>
 <br />
 
