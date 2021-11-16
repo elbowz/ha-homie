@@ -110,6 +110,12 @@ property:
 property_topic: device-id/node-id/property-id # alternative to "property"
 ```
 
+| key | default | description |
+| :--- | :---: | :--- |
+| `property_topic` | none | alternative to `property` key. Allow a plenty of topic format (eg. *root/device-id/node-id/property-id, device-id/node-id/property-id, /device-id/node-id/property-id* |
+| `enabled_by_default` | true | don't display in HA Dashboard but still in entities registry |
+| `unique_id` | none | the unique key used internally by HA to store entity information |
+
 ### Switch
 
 ```yaml
@@ -150,9 +156,9 @@ For didactic purpose (or who is interested) here can see information/documentati
 
 ![class diagram](imgs/class-diagram.png)
 
-### Flow chart
+### Activity Diagram
 
-![class diagram](imgs/flow-chart.png)
+![class diagram](imgs/activity-diagram.png)
 
 ## License
 
