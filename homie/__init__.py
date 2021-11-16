@@ -64,6 +64,7 @@ CONFIG_SCHEMA = vol.Schema(
 _LOGGER = logging.getLogger(__name__)
 
 
+@logger()
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Setup component from yaml configuration.
 
@@ -98,6 +99,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+@logger()
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Setup platform from a ConfigEntry."""
 
@@ -210,7 +212,7 @@ async def _async_setup_discovery(
                     hass, HOMIE_DISCOVERY_NEW_DEVICE.format(device_id)
                 )
 
-    # @logger()
+    @logger()
     async def async_device_on_ready(homie_device):
         # TODO: check include/exclude on device.base_topic
 
