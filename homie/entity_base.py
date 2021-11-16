@@ -146,9 +146,12 @@ class HomieEntity(Entity):
 
     @property
     def name(self):
-        """Return the name of the Homie Switch."""
+        """Return the name to display in UI."""
         return self._config.get(
-            CONF_NAME, self._homie_property.t.get("$name", self._homie_property.id)
+            CONF_NAME,
+            self._homie_property.t.get(
+                "$name", f"{self._homie_device.id} > {self._homie_property.id}"
+            ),
         )
 
     @property
