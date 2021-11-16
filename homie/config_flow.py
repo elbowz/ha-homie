@@ -84,7 +84,6 @@ class HomieConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 mqtt.valid_subscribe_topic(user_input.get(CONF_BASE_TOPIC))
-                pass
             except vol.Invalid:
                 errors["base"] = "invalid_base_topic"
             if not errors:
@@ -115,7 +114,6 @@ class HomieOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             try:
                 mqtt.valid_subscribe_topic(user_input.get(CONF_BASE_TOPIC))
-                pass
             except vol.Invalid:
                 errors["base"] = "invalid_base_topic"
             if not errors:
@@ -126,7 +124,7 @@ class HomieOptionsFlowHandler(config_entries.OptionsFlow):
                 return self.async_create_entry(title="", data=None)
 
         # Merge yaml and config_entry to produce the form pre-fill value
-        conf = {**self.hass.data.get(DATA_HOMIE_CONFIG), **self.config_entry.data}
+        conf = {**self.hass.data.get(DATA_HOMIE_CONFIG, {}), **self.config_entry.data}
 
         base_topic = conf.get(CONF_BASE_TOPIC)
         qos = conf.get(CONF_QOS)
