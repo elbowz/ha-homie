@@ -69,16 +69,16 @@ def async_discover_properties(
     er: EntityRegistry = None,
 ):
 
-    if er is None:
-        er = entity_registry.async_get(hass)
+    # if er is None:
+    #     er = entity_registry.async_get(hass)
 
     def fire_homie_discovery_new(platform: str, unique_id: str, payload: ConfigType):
         """Fire new platform discovered."""
         # If entity is not already added
-        if not er.async_get_entity_id(platform, DOMAIN, unique_id):
-            async_dispatcher_send(
-                hass, HOMIE_DISCOVERY_NEW.format(platform), discovery_payload
-            )
+        # if not er.async_get_entity_id(platform, DOMAIN, unique_id):
+        async_dispatcher_send(
+            hass, HOMIE_DISCOVERY_NEW.format(platform), discovery_payload
+        )
 
     # TODO: implement await device.nodes()
     for node in device.nodes.values():

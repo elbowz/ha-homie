@@ -177,8 +177,9 @@ async def _async_setup_discovery(
     discovery_topic = DISCOVERY_TOPIC.format(base_topic)
 
     # Clear HA device registry (associated to the current config entry)
-    dr = device_registry.async_get(hass)
-    dr.async_clear_config_entry(entry.entry_id)
+    # TODO: add HA service to clear all device (with relative entities)
+    # dr = device_registry.async_get(hass)
+    # dr.async_clear_config_entry(entry.entry_id)
 
     @logger()
     async def async_discovery_message_received(mqttmsg: mqtt.models.ReceiveMessage):
