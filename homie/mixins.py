@@ -32,6 +32,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+@logger()
 @callback
 def async_create_ha_device(
     hass: HomeAssistant,
@@ -42,18 +43,23 @@ def async_create_ha_device(
     """Add (or update if already present) device to HA device registry
 
     https://developers.home-assistant.io/docs/device_registry_index#defining-devices"""
-    mac = device_registry.format_mac(device.t["$mac"])
 
     # map HomieDevice cls and DeviceEntry attrs
     device_registry_entry = {
+        "identifiers": {(DOMAIN, device.id)},
         "config_entry_id": entry.entry_id,
-        "identifiers": {(DOMAIN, mac)},
-        "connections": {(device_registry.CONNECTION_NETWORK_MAC, mac)},
         "name": device.t.get("$name", device.id),
         "model": device.t["$implementation"],
         "manufacturer": f"homie-{device.t['$homie']}",
         "sw_version": device.t["$fw/version"],
     }
+
+    if mac := device.t["$mac"]:
+        mac = device_registry.format_mac(mac)
+
+        device_registry_entry["connections"] = {
+            (device_registry.CONNECTION_NETWORK_MAC, mac)
+        }
 
     if dr is None:
         dr = device_registry.async_get(hass)
@@ -62,6 +68,7 @@ def async_create_ha_device(
     return dr.async_get_or_create(**device_registry_entry)
 
 
+@logger()
 @callback
 def async_discover_properties(
     hass: HomeAssistant,
@@ -72,6 +79,7 @@ def async_discover_properties(
     # if er is None:
     #     er = entity_registry.async_get(hass)
 
+    @logger()
     def fire_homie_discovery_new(platform: str, unique_id: str, payload: ConfigType):
         """Fire new platform discovered."""
         # If entity is not already added
