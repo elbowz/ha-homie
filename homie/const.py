@@ -35,7 +35,7 @@ HOMIE_DISCOVERY_NEW = f"{DOMAIN}_discovery_new_{{}}"
 HOMIE_DISCOVERY_NEW_DEVICE = f"{DOMAIN}_discovery_new_{CONF_DEVICE}_{{}}"
 
 # useful consts
-HOMIE_SUPPORTED_VERSION = ["3.0.0", "3.0.1", "4.0.0"]
+HOMIE_SUPPORTED_VERSION = ["3.0", "3.0.0", "3.0.1", "4.0", "4.0.0"]
 DISCOVERY_TOPIC = "{}/+/$homie"
 DEVICE = CONF_DEVICE
 NODE = CONF_NODE
