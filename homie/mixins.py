@@ -44,6 +44,10 @@ def async_create_ha_device(
 
     https://developers.home-assistant.io/docs/device_registry_index#defining-devices"""
 
+    _LOGGER.debug(
+        "Adding new device: %s (id) on %s (topic)", device.id, device.base_topic
+    )
+
     # map HomieDevice cls and DeviceEntry attrs
     device_registry_entry = {
         "identifiers": {(DOMAIN, device.id)},
@@ -90,9 +94,14 @@ def async_discover_properties(
 
     # TODO: implement await device.nodes()
     for node in device.nodes.values():
+
+        _LOGGER.debug("For node: %s", node.id)
+
         for property in node.properties.values():
 
             # TODO: check include/exclude on property.base_topic
+
+            _LOGGER.debug("Try to match property: %s", property.id)
 
             platform_domain = None
 
