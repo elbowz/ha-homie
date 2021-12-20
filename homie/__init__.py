@@ -214,7 +214,7 @@ async def _async_setup_discovery(
                 )
 
     @logger()
-    async def async_device_on_ready(homie_device):
+    async def async_device_on_ready(homie_device: HomieDevice):
         # TODO: check include/exclude on device.base_topic
 
         # Add/update device to HA device registry
