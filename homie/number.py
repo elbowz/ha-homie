@@ -57,7 +57,7 @@ PLATFORM_SCHEMA = entity_base.SCHEMA_BASE.extend(
         vol.Optional(CONF_MIN): vol.Coerce(float),
         vol.Optional(CONF_OPTIMISTIC, default=DEFAULT_OPTIMISTIC): cv.boolean,
         vol.Optional(CONF_STEP): vol.All(vol.Coerce(float), vol.Range(min=1e-3)),
-        vol.Optional(CONF_MODE, default=number.MODE_AUTO): vol.All(
+        vol.Optional(CONF_MODE, default=number.NumberMode.AUTO): vol.All(
             vol.Lower, vol.In(["auto", "slider", "box"])
         ),
         vol.Optional(CONF_UNIT_OF_MEASUREMENT): cv.string,
