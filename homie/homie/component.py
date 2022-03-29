@@ -112,9 +112,11 @@ class HomieDevice(HomieBase):
             name: {**sub_base, **value} for (name, value) in sub_topics.items()
         }
 
-        self._sub_state = await subscription.async_subscribe_topics(
+        self._sub_state = subscription.async_prepare_subscribe_topics(
             self._hass, self._sub_state, sub_topics
         )
+
+        await subscription.async_subscribe_topics(self._hass, self._sub_state)
 
     async def async_unsubscribe_topics(self):
         self._sub_state = await subscription.async_unsubscribe_topics(
@@ -253,7 +255,7 @@ class HomieProperty(HomieBase):
     async def async_set(self, value: str):
         """Set the state of the Property."""
         if self.settable:
-            mqtt.async_publish(
+            await mqtt.async_publish(
                 self._hass, f"{self.base_topic}/set", value, self._qos, retain=True
             )
 
