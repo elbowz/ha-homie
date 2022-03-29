@@ -160,6 +160,17 @@ For didactic purpose (or who is interested) here can see information/documentati
 
 ![class diagram](imgs/activity-diagram.png)
 
+## :sparkling_heart: Support the project
+
+I open-source almost everything I can. If you are using this project and are happy with it, please consider one of these ways to support the project (and me):
+
+* Giving proper credit when you use it, linking back to it :D
+* Starring :star2: and sharing the project :rocket:
+* Submit PRs, bug reports and feature requests
+* [![Paypal][paypal-shield]][paypal-url] Make one-time donations via PayPal. I'll probably buy a :beer:
+
+Thanks! :heart:
+
 ## License
 
 Distributed under the GPL License. See [LICENSE][license-url] for more information.
@@ -181,3 +192,5 @@ Distributed under the GPL License. See [LICENSE][license-url] for more informati
 [ha-shield]: https://img.shields.io/static/v1?label=Powered&message=Homeassistant&style=for-the-badge&color=informational
 [homie-url]: https://github.com/homieiot/homie-esp8266
 [ha-url]: https://www.home-assistant.io/
+[paypal-shield]: https://img.shields.io/badge/-Donate-black.svg?style=flat-square&logo=paypal&colorB=555
+[paypal-url]: https://www.paypal.me/EmanuelePalombo
