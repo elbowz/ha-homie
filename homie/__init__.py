@@ -31,7 +31,6 @@ from .const import (
     CONF_QOS,
     CONF_INCLUDE,
     CONF_EXCLUDE,
-    _VALID_QOS_SCHEMA,
     DEFAULT_BASE_TOPIC,
     DEFAULT_QOS,
     DEFAULT_DISCOVERY,
@@ -47,7 +46,7 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(
                     CONF_BASE_TOPIC, default=DEFAULT_BASE_TOPIC
                 ): mqtt.valid_subscribe_topic,
-                vol.Optional(CONF_QOS, default=DEFAULT_QOS): _VALID_QOS_SCHEMA,
+                vol.Optional(CONF_QOS, default=DEFAULT_QOS): mqtt.valid_qos_schema,
                 vol.Optional(CONF_DISCOVERY, default=DEFAULT_DISCOVERY): cv.boolean,
                 vol.Optional(CONF_INCLUDE, default=[]): vol.All(
                     cv.ensure_list, [cv.string]

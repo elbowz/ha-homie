@@ -24,7 +24,6 @@ from .const import (
     DEFAULT_QOS,
     CONF_DISCOVERY,
     DEFAULT_DISCOVERY,
-    _VALID_QOS_SCHEMA,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -34,7 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_BASE_TOPIC, default=DEFAULT_BASE_TOPIC): cv.string,
-        vol.Optional(CONF_QOS, default=DEFAULT_QOS): _VALID_QOS_SCHEMA,
+        vol.Optional(CONF_QOS, default=DEFAULT_QOS): mqtt.valid_qos_schema,
         vol.Optional(CONF_DISCOVERY, default=DEFAULT_DISCOVERY): cv.boolean,
     }
 )
@@ -133,7 +132,7 @@ class HomieOptionsFlowHandler(config_entries.OptionsFlow):
         MOD_CONFIG_SCHEMA = vol.Schema(
             {
                 vol.Optional(CONF_BASE_TOPIC, default=base_topic): cv.string,
-                vol.Optional(CONF_QOS, default=qos): _VALID_QOS_SCHEMA,
+                vol.Optional(CONF_QOS, default=qos): mqtt.valid_qos_schema,
                 vol.Optional(
                     CONF_DISCOVERY,
                     default=discovery,

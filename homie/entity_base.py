@@ -7,7 +7,7 @@ from homeassistant.helpers import device_registry, config_validation as cv
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.typing import ConfigType
 
-from homeassistant.components.mqtt import valid_subscribe_topic
+from homeassistant.components.mqtt import valid_subscribe_topic, valid_qos_schema
 
 from .homie import HomieDevice, HomieProperty
 
@@ -16,7 +16,6 @@ from .const import (
     CONF_QOS,
     DEFAULT_QOS,
     DATA_KNOWN_DEVICES,
-    _VALID_QOS_SCHEMA,
     CONF_NAME,
     CONF_ICON,
     CONF_UNIQUE_ID,
@@ -37,7 +36,7 @@ SCHEMA_BASE = vol.Schema(
         vol.Optional(CONF_ICON): cv.icon,
         vol.Optional(CONF_UNIQUE_ID): cv.string,
         vol.Optional(CONF_ENABLED_BY_DEFAULT, default=True): cv.boolean,
-        vol.Optional(CONF_QOS, default=DEFAULT_QOS): _VALID_QOS_SCHEMA,
+        vol.Optional(CONF_QOS, default=DEFAULT_QOS): valid_qos_schema,
         vol.Exclusive(CONF_PROPERTY, "property"): vol.Schema(
             {
                 vol.Required(CONF_DEVICE): cv.string,

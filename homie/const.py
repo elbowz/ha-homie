@@ -8,7 +8,7 @@ from homeassistant.const import (
     CONF_UNIQUE_ID,
     CONF_DEVICE_CLASS,
 )
-from homeassistant.components.mqtt import CONF_DISCOVERY, CONF_QOS, _VALID_QOS_SCHEMA
+from homeassistant.components.mqtt import CONF_DISCOVERY, CONF_QOS
 from .homie import TRUE, FALSE
 
 DOMAIN = "homie"
