@@ -125,29 +125,29 @@ class HomieNumber(entity_base.HomieEntity, number.NumberEntity):
         self._optimistic = self._config.get(CONF_OPTIMISTIC)
 
     @property
-    def min_value(self) -> float:
+    def native_min_value(self) -> float:
         """Return the minimum value."""
         min_value, _ = self._homie_property.t.get("$format").split(":")
         return self._config.get(CONF_MIN, float(min_value))
 
     @property
-    def max_value(self) -> float:
+    def native_max_value(self) -> float:
         """Return the maximum value."""
         _, max_value = self._homie_property.t.get("$format").split(":")
         return self._config.get(CONF_MAX, float(max_value))
 
     @property
-    def step(self) -> float:
+    def native_step(self) -> float:
         """Return the increment/decrement step."""
-        return self._config.get(CONF_STEP, super().step)
+        return self._config.get(CONF_STEP, super().native_step)
 
     @property
-    def value(self):
+    def native_value(self):
         """Return the current value."""
         return self._homie_property.value
 
     @property
-    def unit_of_measurement(self) -> str | None:
+    def native_unit_of_measurement(self) -> str | None:
         """Return the unit this state is expressed in."""
         return self._config.get(
             CONF_UNIT_OF_MEASUREMENT, self._homie_property.t["$unit"]
@@ -157,7 +157,7 @@ class HomieNumber(entity_base.HomieEntity, number.NumberEntity):
     def mode(self) -> str | None:
         return self._config.get(CONF_MODE)
 
-    async def async_set_value(self, value: float) -> None:
+    async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
         # if value.is_integer():
         #     value = int(value)
