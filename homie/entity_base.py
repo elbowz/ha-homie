@@ -121,7 +121,7 @@ class HomieEntity(Entity):
         # map HomieDevice and DeviceEntry attrs
         device_registry_entry = {
             "identifiers": {(DOMAIN, self._homie_device.id)},
-            "config_entry_id": self._config_entry.entry_id,
+            # "config_entry_id": self._config_entry.entry_id,
             "name": self._homie_device.t.get("$name", self._homie_device.id),
             "model": self._homie_device.t["$implementation"],
             "manufacturer": f"homie-{self._homie_device.t['$homie']}",
